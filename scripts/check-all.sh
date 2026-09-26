@@ -11,6 +11,7 @@ pnpm format:check
 pnpm lint
 pnpm build
 pnpm typecheck
+pnpm test
 
 echo "==> Python agent: venv, ruff lint, ruff format, import check"
 if [ ! -d services/agent/.venv ]; then

@@ -1,0 +1,72 @@
+{
+  "_fixture": true,
+  "_fixtureDescription": "RECORDED/SANITIZED FIXTURE - NOT LIVE DATA. Error envelopes documented in the official Binance Web3 API docs (authentication.md and market-api/error-codes.md). Market API responses use HTTP 200 with a non-zero business code.",
+  "cases": [
+    {
+      "code": 40001,
+      "msg": "Parameter [binanceChainId] error: blank or unsupported",
+      "expectedCategory": "invalid-request",
+      "httpStatus": 200
+    },
+    {
+      "code": 40101,
+      "msg": "Invalid API Key",
+      "expectedCategory": "authentication",
+      "httpStatus": 401
+    },
+    {
+      "code": 40102,
+      "msg": "Signature error",
+      "expectedCategory": "authentication",
+      "httpStatus": 200
+    },
+    {
+      "code": 40103,
+      "msg": "Timestamp expired",
+      "expectedCategory": "authentication",
+      "httpStatus": 401
+    },
+    {
+      "code": 40104,
+      "msg": "Permission denied",
+      "expectedCategory": "authentication",
+      "httpStatus": 403
+    },
+    {
+      "code": 40301,
+      "msg": "Service not available in your region",
+      "expectedCategory": "region-blocked",
+      "httpStatus": 200
+    },
+    {
+      "code": 40302,
+      "msg": "Proxy or VPN detected. Please use direct connection",
+      "expectedCategory": "region-blocked",
+      "httpStatus": 200
+    },
+    {
+      "code": 40411,
+      "msg": "This chain is not supported",
+      "expectedCategory": "unsupported-chain",
+      "httpStatus": 200
+    },
+    {
+      "code": 42900,
+      "msg": "Request rate limit exceeded.",
+      "expectedCategory": "rate-limit",
+      "httpStatus": 200
+    },
+    {
+      "code": 50000,
+      "msg": "Internal server error, please retry later",
+      "expectedCategory": "api-error",
+      "httpStatus": 200
+    },
+    {
+      "code": 50001,
+      "msg": "Service temporarily unavailable, please retry later",
+      "expectedCategory": "api-error",
+      "httpStatus": 200
+    }
+  ]
+}

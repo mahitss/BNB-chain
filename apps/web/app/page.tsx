@@ -53,8 +53,14 @@ export default function HomePage() {
           Status
         </h2>
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 font-mono text-sm leading-relaxed text-amber-300">
-          Phase 1 — repository foundation. No market data, no trading, no wallet activity yet.
+          Phase 2 — Binance Web3 RWA data integration. No trading, no wallet activity yet.
         </p>
+        <a
+          href="/rwa"
+          className="inline-block w-fit rounded border border-zinc-700 px-4 py-2 font-mono text-sm text-zinc-200 transition-colors hover:border-amber-500/50 hover:text-amber-400"
+        >
+          View RWA data →
+        </a>
       </section>
 
       <section aria-labelledby="services-heading" className="flex flex-col gap-3">

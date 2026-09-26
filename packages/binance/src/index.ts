@@ -1,50 +1,54 @@
 /**
  * Binance integration surface for OLYR.
  *
- * Phase 1 intentionally contains interfaces only — no implementation, no
- * network calls, no credentials. The real Binance Web3 client (market data
- * first, order routing later) will be implemented against these interfaces in
- * a later phase, so consumers never depend on Binance specifics directly.
- */
-
-/** Options for constructing a Binance client. */
-export interface BinanceClientOptions {
-  /** REST base URL. Public market-data endpoints need no credentials. */
-  baseUrl: string;
-  /** Request timeout in milliseconds. */
-  timeoutMs: number;
-  /** API key. Optional for public endpoints; required for account actions later. */
-  apiKey?: string;
-  /** API secret. Never logged, never committed. */
-  apiSecret?: string;
-}
-
-/** A spot price observation for a symbol. */
-export interface SymbolPrice {
-  symbol: string;
-  /** Decimal string, e.g. "0.3142" — avoids float precision loss. */
-  price: string;
-  /** ISO-8601 timestamp of the observation. */
-  timestamp: string;
-}
-
-/**
- * Read-only market data surface consumed by OLYR services.
+ * Phase 2: read-only RWA (tokenized-equity) market data client, implemented
+ * strictly against the official documentation:
+ *   https://web3.binance.com/en/dev-docs/products/market-api/introduction
+ *   https://web3.binance.com/en/dev-docs/authentication.md
  *
- * TODO(phase-2): implement against Binance Web3 endpoints (spot prices,
- * klines, exchange info) behind this interface.
+ * The rest of OLYR depends on the BinanceRwaClient interface and @olyr/types
+ * domain types — never on raw Binance HTTP responses. Trading, swaps, wallet,
+ * and broadcast endpoints are intentionally NOT implemented. The Phase 1
+ * speculative `BinanceMarketDataSource` seam was replaced by the documented
+ * `BinanceRwaClient`.
  */
-export interface BinanceMarketDataSource {
-  getSymbolPrice(symbol: string): Promise<SymbolPrice>;
-}
 
-/**
- * Raised when a Binance client is requested before the integration phase has
- * wired a real implementation.
- */
-export class BinanceNotConfiguredError extends Error {
-  constructor(message = "Binance integration is not implemented yet (planned for a later phase)") {
-    super(message);
-    this.name = "BinanceNotConfiguredError";
-  }
-}
+export {
+  HttpBinanceRwaClient,
+  DEFAULT_BASE_URL,
+  DEFAULT_TIMEOUT_MS,
+  MAX_BATCH_CONTRACTS,
+} from "./rwa-client.js";
+export type { BinanceRwaClient, BinanceRwaClientConfig } from "./rwa-client.js";
+
+export {
+  BinanceError,
+  BinanceAuthError,
+  BinanceInvalidRequestError,
+  BinanceMalformedResponseError,
+  BinanceMarketDataUnavailableError,
+  BinanceNetworkError,
+  BinanceNotConfiguredError,
+  BinanceRateLimitError,
+  BinanceRegionBlockedError,
+  BinanceServerError,
+  BinanceTimeoutError,
+  BinanceUnsupportedChainError,
+  errorFromEnvelopeCode,
+  isRetryableError,
+} from "./errors.js";
+export type { BinanceErrorCategory } from "./errors.js";
+
+export {
+  BINANCE_BUILD_PREFIX,
+  binanceTimestamp,
+  buildPreHash,
+  buildRawQuery,
+  signRequest,
+} from "./signer.js";
+export type { SignatureInput } from "./signer.js";
+
+export { silentLogger, redactCredentials } from "./logger.js";
+export type { Logger } from "./logger.js";
+export { DEFAULT_RETRY_CONFIG } from "./http.js";
+export type { RetryConfig, Sleep } from "./http.js";

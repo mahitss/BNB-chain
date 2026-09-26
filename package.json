@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
-    "check": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck"
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "check": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

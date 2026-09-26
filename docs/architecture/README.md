@@ -7,10 +7,44 @@ traditional market-hours state, detects actionable spreads, validates risk
 deterministically, and executes bounded spot trades through Binance Web3
 infrastructure — always simulating before broadcasting.
 
-**Phase status:** this document describes the target architecture. Phase 1
-delivers the repository foundation only: all services boot and expose
-`GET /health`, with no market data, trading, AI, wallet, or contract activity
-yet. Sections below mark what exists today versus what is planned.
+**Phase status:** this document describes the target architecture. Phase 2
+delivers the Binance Web3 RWA data integration (read-only market data): the
+api serves real tokenized-stock data to the web dashboard through
+`@olyr/binance`. There is still no trading, AI, wallet, or contract activity.
+Sections below mark what exists today versus what is planned.
+
+## Phase 2 data flow — Binance RWA integration (implemented)
+
+```
+Binance Web3 Market API  (web3.binance.com/build, HMAC-signed requests)
+    ↓
+RWA Client   HttpBinanceRwaClient (@olyr/binance) — signing, timeout, retry,
+    ↓         typed errors, structured logging; BinanceRwaClient interface
+Normalizer   raw payloads → normalized shapes (@olyr/binance/normalize)
+    ↓
+Domain types @olyr/types — TokenizedAsset, RwaPriceQuote, RwaMarketStatusInfo,
+    ↓         Spread (deterministic calculateSpread), RwaMarketSnapshot
+Fastify API  apps/api — RwaService (caching, snapshot assembly) +
+    ↓         GET /api/rwa/* routes, GET /ready
+Next.js      apps/web — /rwa dashboard page (TanStack Query),
+             calls ONLY the Fastify API
+```
+
+### Security boundary for Binance credentials
+
+- `BINANCE_API_KEY` / `BINANCE_API_SECRET` are read **only** inside the api
+  service process (via `@olyr/config`). They are never sent to the browser:
+  the web app imports no Binance code, and `@olyr/binance` is never part of
+  the Next.js client bundle — the browser talks exclusively to OLYR's API.
+- The Next.js app reaches Binance data only through
+  `fetch(NEXT_PUBLIC_OLYR_API_URL)/api/rwa/*`, which returns normalized
+  domain types. Raw Binance responses never cross the api boundary
+  (normalization happens inside `@olyr/binance`).
+- Secrets are never logged: the client logs operation, path, HTTP status,
+  latency, and error category only; header values are redacted by
+  `redactCredentials`. Credentials are never hardcoded or defaulted — without
+  them the API starts in dev mode and RWA endpoints return a structured 503
+  with setup instructions (no fake data anywhere).
 
 ## Service responsibilities
 
@@ -21,9 +55,9 @@ yet. Sections below mark what exists today versus what is planned.
 | `services/agent`       | Python, FastAPI     | LLM-driven analysis with structured tool calling; provider abstracted behind an interface   | Boots; `GET /health`       |
 | `services/execution`   | Go                  | Sole component that signs and broadcasts transactions; enforces simulation-before-broadcast | Boots; `GET /health`       |
 | `services/risk-engine` | Rust, axum          | Deterministic, LLM-independent validation of every proposed action                          | Boots; `GET /health`       |
-| `packages/types`       | TypeScript          | Shared cross-service contracts (`HealthCheck`, price/spread types)                          | Exists                     |
-| `packages/config`      | TypeScript          | Environment-driven configuration helpers                                                    | Exists                     |
-| `packages/binance`     | TypeScript          | Binance Web3 integration seam — interfaces only until the integration phase                 | Interfaces only            |
+| `packages/types`       | TypeScript          | Shared cross-service contracts (HealthCheck, RWA domain types, spread calc)                 | Exists                     |
+| `packages/config`      | TypeScript          | Environment-driven configuration helpers + Binance config validation                        | Exists                     |
+| `packages/binance`     | TypeScript          | Binance Web3 RWA client (read-only market data): `BinanceRwaClient`                         | Implemented (read-only)    |
 | `contracts/`           | Solidity, Foundry   | On-chain components, only when genuinely required                                           | Placeholder                |
 
 ## Communication boundaries
@@ -117,14 +151,41 @@ bootable process with a health endpoint.
 - **Containers run non-root.** All service images drop to an unprivileged
   user.
 
-## Future Binance integration point
+## Binance integration point (Phase 2, read-only)
 
-All Binance Web3 access will be funneled through `packages/binance`
-(`@olyr/binance`). Phase 1 ships the seam only: `BinanceMarketDataSource` for
-read-only market data and supporting types. When the integration phase
-arrives, a concrete client is implemented behind that interface and injected
-where needed, so callers stay decoupled from Binance specifics (endpoints,
-auth, rate limits) and the integration can be tested against fakes in CI.
+All Binance Web3 access is funneled through `packages/binance`
+(`@olyr/binance`). Consumers depend on the `BinanceRwaClient` interface and
+receive normalized `@olyr/types` domain objects — never raw Binance HTTP
+responses. The implemented RWA methods (all documented, read-only):
+
+| Method                    | Binance endpoint (GET)                      | Notes                             |
+| ------------------------- | ------------------------------------------- | --------------------------------- |
+| `listPlatforms`           | `/api/v1/dex/market/rwa/platforms`          | issuance platforms (ondo, bstock) |
+| `listTokens`              | `/api/v1/dex/market/rwa/tokens`             | assets + embedded prices + status |
+| `getTokenPrices`          | `/api/v1/dex/market/rwa/price`              | batch ≤100 contract addresses     |
+| `searchTokens`            | `/api/v1/dex/market/rwa/search`             | keyword / contract address        |
+| `getUnderlyingProfile`    | `/api/v1/dex/market/rwa/underlying-profile` | company info                      |
+| `getUnderlyingMarketData` | `/api/v1/dex/market/rwa/underlying-market`  | underlying stats + status         |
+
+Authentication follows the official docs: `X-OC-APIKEY`, `X-OC-TIMESTAMP`
+(ISO 8601 ms), `X-OC-SIGN` = Base64(HMAC-SHA256 over
+`timestamp + METHOD + requestPath + body`), with the signed `requestPath`
+including the `/build` prefix. Requests carry a bounded timeout and retry
+only transient failures (429 / 5xx / network) with capped exponential
+backoff. Market API errors arrive as HTTP 200 with a non-zero business
+`code`; these map to typed errors (auth / invalid-request / rate-limit /
+region / unsupported-chain / server / malformed).
+
+API routes serving this data (all cache-backed with configurable TTLs):
+
+| Route                                              | Purpose                                     |
+| -------------------------------------------------- | ------------------------------------------- |
+| `GET /api/rwa/assets`                              | tokenized assets + prices + spread + status |
+| `GET /api/rwa/assets/:ticker`                      | search matches for a ticker                 |
+| `GET /api/rwa/assets/:ticker/market`               | full snapshot incl. official market status  |
+| `GET /api/rwa/assets/:ticker/price`                | on-chain + reference quote + spread         |
+| `GET /api/rwa/platforms`                           | issuance platforms                          |
+| `GET /ready` (`?probe=1` for a live Binance check) | readiness; `/health` stays independent      |
 
 ## Data stores (future)
 

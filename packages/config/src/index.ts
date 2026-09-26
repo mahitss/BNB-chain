@@ -81,3 +81,10 @@ export function envEnum<T extends string>(key: string, allowed: readonly T[], fa
 export function loadEnvironment(): Environment {
   return envEnum("OLYR_ENV", ENVIRONMENTS, "development");
 }
+
+export {
+  isBinanceConfigured,
+  loadBinanceConfig,
+  type BinanceCacheTtls,
+  type BinanceConfig,
+} from "./binance.js";

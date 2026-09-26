@@ -1,30 +1,11 @@
 /**
- * OLYR API service (Fastify).
- *
- * Phase 1 exposes a health endpoint only. Route handlers stay thin; business
- * logic will live in dedicated modules and downstream services as the
- * platform grows.
+ * OLYR API service entrypoint.
  */
-import Fastify from "fastify";
-import { envInt, loadEnvironment } from "@olyr/config";
-import type { HealthCheck } from "@olyr/types";
+import { buildApp } from "./app.js";
+import { envInt } from "@olyr/config";
 
-const apiVersion = "0.1.0";
-const environment = loadEnvironment();
 const port = envInt("API_PORT", 4000);
-
-const app = Fastify({
-  logger: { level: environment === "development" ? "debug" : "info" },
-});
-
-app.get("/health", async (): Promise<HealthCheck> => {
-  return {
-    service: "api",
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    version: apiVersion,
-  };
-});
+const app = await buildApp();
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {

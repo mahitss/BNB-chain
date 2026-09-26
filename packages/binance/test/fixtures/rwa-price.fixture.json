@@ -1,0 +1,26 @@
+{
+  "_fixture": true,
+  "_fixtureDescription": "RECORDED/SANITIZED FIXTURE - NOT LIVE DATA. Structure from the official Binance Web3 OpenAPI schema (rwa/price 200 response); values from the schema's documented examples.",
+  "code": 0,
+  "msg": "success",
+  "timestamp": 1748601600500,
+  "success": true,
+  "data": [
+    {
+      "binanceChainId": "56",
+      "tokenContractAddress": "0x8755c5c39b1aa9053a83ac731242a2cf4d04b0fe",
+      "platformId": "ondo",
+      "tokenPrice": "61.746364",
+      "referencePrice": "61.700000",
+      "tokenPriceUpdatedAt": 1748601590000
+    },
+    {
+      "binanceChainId": "56",
+      "tokenContractAddress": "0x0000000000000000000000000000000000000002",
+      "platformId": "ondo",
+      "tokenPrice": null,
+      "referencePrice": null,
+      "tokenPriceUpdatedAt": null
+    }
+  ]
+}
