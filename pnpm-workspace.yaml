@@ -3,5 +3,9 @@ packages:
   - "packages/*"
 # pnpm 10+ blocks dependency postinstall scripts unless explicitly allowed.
 # esbuild (used by tsx) links its platform binary in a postinstall step.
+# prisma/@prisma/* download query engines in postinstall scripts.
 allowBuilds:
+  "@prisma/client": true
+  "@prisma/engines": true
   esbuild: true
+  prisma: true

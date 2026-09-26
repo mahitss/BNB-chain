@@ -183,6 +183,44 @@ API /api/market/*, /api/opportunities/* → OLYR Terminal (/markets)
 Read-only: this layer produces information only — no signing, no swaps, no
 broadcasts, no wallet access.
 
+## Agentic Strategy Engine (Phase 4)
+
+```
+User
+ ↓
+Next.js (/strategies)
+ ↓
+Fastify  POST /api/strategies/parse
+ ↓
+Python Agent  POST /agent/parse
+   LLMProvider (OLYR_LLM_PROVIDER; raw JSON only)
+   ↓ schema → semantic → capability → safety validation (deterministic)
+ ↓
+Validated Strategy  (PARSED | NEEDS_CLARIFICATION | REJECTED + agent events)
+ ↓
+Fastify Strategy Registry  (re-validates, explains deterministically,
+persists via Prisma: Strategy + AgentEvent)
+ ↓
+Market Intelligence (Phase 3 evaluation) → Future Risk Engine → Future Execution
+```
+
+Security boundary (no exceptions):
+
+- The LLM produces TEXT ONLY. It has no tools, no network beyond its own
+  provider endpoint, no keys, and no ability to call anything after emitting
+  its response.
+- There is NO path LLM → Wallet, LLM → Private Key, LLM → Blockchain RPC, or
+  LLM → arbitrary transaction. Execution does not exist yet.
+- Platform hard limits (OLYR_MAX_STRATEGY_TRADE_USD etc.) are enforced by the
+  agent validators AND re-enforced by Fastify before persistence — the model
+  can never override them.
+- The user text is untrusted: the parser prompt treats injected instructions
+  as data, and even a 'compliant' model output must pass the deterministic
+  validators.
+- Explanations are regenerated from the stored definition by the Fastify
+  explainer, so the UI can never show an explanation that diverges from the
+  persisted strategy.
+
 ## Binance integration point (Phase 2, read-only)
 
 All Binance Web3 access is funneled through `packages/binance`

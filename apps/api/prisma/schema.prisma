@@ -1,0 +1,36 @@
+// OLYR strategy registry (Phase 4). Postgres via DATABASE_URL.
+// Strategies store the validated structured definition — never secrets.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Strategy {
+  id          String      @id @default(cuid())
+  ownerId     String
+  name        String
+  status      String      @default("DRAFT") // DRAFT | ACTIVE | PAUSED | DISABLED | INVALID
+  definition  Json
+  explanation String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  events      AgentEvent[]
+
+  @@index([ownerId, createdAt])
+}
+
+model AgentEvent {
+  id         String    @id @default(cuid())
+  strategyId String?
+  strategy   Strategy? @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  type       String // see AGENT_EVENT_TYPES in @olyr/types
+  detail     Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([strategyId, createdAt])
+}

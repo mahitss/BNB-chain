@@ -36,6 +36,13 @@ import { MarketIntelligenceService } from "./services/market.js";
 import { OpportunityScanner } from "./scanner/scanner.js";
 import { InMemoryScanStore } from "./scanner/store.js";
 import { createDistributedLock } from "./scanner/lock.js";
+import {
+  AgentUnavailableError,
+  HttpAgentClient,
+  type AgentClient,
+} from "./strategies/agent-client.js";
+import { loadStrategyLimits } from "./strategies/limits.js";
+import { RegistryValidationError, StrategyRegistry } from "./strategies/registry.js";
 
 export const API_VERSION = "0.3.0";
 
@@ -45,6 +52,10 @@ const CONTRACT_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 export interface BuildAppOptions {
   /** Test seam: inject a client instead of the HTTP implementation. */
   binanceClient?: BinanceRwaClient;
+  /** Test seam: inject the agent client instead of HTTP transport. */
+  agentClient?: AgentClient;
+  /** Test seam: inject a Prisma-like client instead of the real one. */
+  prisma?: import("./strategies/registry.js").PrismaClientLike;
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
@@ -121,6 +132,29 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       : null;
   scanner?.start();
 
+  // Strategy registry (Phase 4): Prisma-backed; endpoints degrade to 503 in
+  // dev mode when DATABASE_URL is not configured.
+  let registry: StrategyRegistry | null = null;
+  let prisma: import("@prisma/client").PrismaClient | null = null;
+  if (options.prisma) {
+    registry = new StrategyRegistry({
+      prisma: options.prisma,
+      limits: loadStrategyLimits(),
+      ownerId: envOptionalString("OLYR_DEFAULT_OWNER") ?? "local-dev",
+    });
+  } else if (process.env["DATABASE_URL"]) {
+    const { PrismaClient } = await import("@prisma/client");
+    prisma = new PrismaClient();
+    registry = new StrategyRegistry({
+      prisma: prisma as unknown as import("./strategies/registry.js").PrismaClientLike,
+      limits: loadStrategyLimits(),
+      ownerId: envOptionalString("OLYR_DEFAULT_OWNER") ?? "local-dev",
+    });
+  }
+  const agentClient: AgentClient =
+    options.agentClient ??
+    new HttpAgentClient(envOptionalString("OLYR_AGENT_URL") ?? "http://localhost:8000");
+
   const notConfiguredResponse = () => ({
     error: {
       category: "not-configured",
@@ -190,6 +224,143 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     }
     return marketService;
   };
+
+  const requireRegistry = (): StrategyRegistry => {
+    if (!registry) {
+      throw Object.assign(
+        new Error("Strategy registry not configured: set DATABASE_URL (see .env.example)"),
+        {
+          statusCode: 503,
+          payload: {
+            error: {
+              category: "not-configured",
+              message:
+                "Strategy registry requires DATABASE_URL (PostgreSQL). See .env.example and docker-compose.yml.",
+            },
+          },
+        },
+      );
+    }
+    return registry;
+  };
+
+  // ---- Strategy endpoints (Phase 4) --------------------------------------
+
+  app.post<{ Body: { text?: string } }>("/api/strategies/parse", async (request, reply) => {
+    const text = typeof request.body?.text === "string" ? request.body.text : "";
+    try {
+      return await requireRegistry().parseWithAgent(agentClient, text);
+    } catch (error) {
+      if (error instanceof AgentUnavailableError) {
+        return reply.code(error.status).send({
+          error: {
+            category: error.status === 503 ? "provider-not-configured" : "agent-unavailable",
+            message: error.message,
+          },
+        });
+      }
+      throw error;
+    }
+  });
+
+  app.post<{ Body: { strategy?: unknown } }>("/api/strategies", async (request, reply) => {
+    try {
+      const record = await requireRegistry().create(request.body?.strategy);
+      return reply.code(201).send(record);
+    } catch (error) {
+      if (error instanceof RegistryValidationError) {
+        return reply.code(422).send({
+          error: { category: "validation-failed", message: error.message, errors: error.errors },
+        });
+      }
+      throw error;
+    }
+  });
+
+  app.get("/api/strategies", async () => {
+    return { strategies: await requireRegistry().list() };
+  });
+
+  app.get<{ Params: { id: string } }>("/api/strategies/:id", async (request, reply) => {
+    const record = await requireRegistry().get(request.params.id);
+    if (!record) {
+      return reply
+        .code(404)
+        .send({ error: { category: "not-found", message: "Strategy not found" } });
+    }
+    return record;
+  });
+
+  app.patch<{ Params: { id: string }; Body: { name?: string; status?: string } }>(
+    "/api/strategies/:id",
+    async (request, reply) => {
+      const { name, status } = request.body ?? {};
+      try {
+        if (typeof status === "string") {
+          return await requireRegistry().updateStatus(request.params.id, status as never, [
+            "DRAFT",
+            "ACTIVE",
+            "PAUSED",
+          ]);
+        }
+        if (typeof name === "string") {
+          return await requireRegistry().updateName(request.params.id, name);
+        }
+        return reply.code(400).send({
+          error: { category: "invalid-request", message: "Provide name or status to update" },
+        });
+      } catch (error) {
+        if (error instanceof RegistryValidationError) {
+          return reply.code(422).send({
+            error: { category: "validation-failed", message: error.message, errors: error.errors },
+          });
+        }
+        if (error instanceof Error && error.message === "NOT_FOUND") {
+          return reply
+            .code(404)
+            .send({ error: { category: "not-found", message: "Strategy not found" } });
+        }
+        throw error;
+      }
+    },
+  );
+
+  const statusTransition =
+    (to: "ACTIVE" | "PAUSED", allowedFrom: string[]) =>
+    async (request: { params: { id: string } }, reply: FastifyReply) => {
+      try {
+        return await requireRegistry().updateStatus(request.params.id, to, allowedFrom as never);
+      } catch (error) {
+        if (error instanceof RegistryValidationError) {
+          return reply.code(422).send({
+            error: { category: "validation-failed", message: error.message, errors: error.errors },
+          });
+        }
+        if (error instanceof Error && error.message === "NOT_FOUND") {
+          return reply
+            .code(404)
+            .send({ error: { category: "not-found", message: "Strategy not found" } });
+        }
+        throw error;
+      }
+    };
+
+  app.post<{ Params: { id: string } }>(
+    "/api/strategies/:id/activate",
+    statusTransition("ACTIVE", ["DRAFT", "PAUSED"]),
+  );
+  app.post<{ Params: { id: string } }>(
+    "/api/strategies/:id/pause",
+    statusTransition("PAUSED", ["ACTIVE"]),
+  );
+
+  app.get<{ Params: { id: string } }>("/api/strategies/:id/events", async (request) => {
+    requireRegistry();
+    return {
+      strategyId: request.params.id,
+      events: await registry!.events(request.params.id),
+    };
+  });
 
   app.get<{ Querystring: { chainId?: string; platformId?: string } }>(
     "/api/rwa/assets",
@@ -385,6 +556,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.addHook("onClose", async () => {
     await scanner?.stop();
     await cache.close();
+    await prisma?.$disconnect();
   });
 
   app.log.info(

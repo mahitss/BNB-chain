@@ -130,6 +130,50 @@ To be filled during live verification; do not fabricate observations.
      differs from the documented assumptions. Only real observations. -->
 ```
 
+## Phase 4 template — AI stack / agentic strategy engine
+
+To be filled during live verification; do not fabricate observations.
+
+```markdown
+## YYYY-MM-DD — Live LLM verification
+
+### AI stack used
+
+<!-- Provider endpoint, integration style (structured output / JSON mode). -->
+
+### Model/provider
+
+<!-- OLYR_LLM_PROVIDER / OLYR_LLM_MODEL values used and why. -->
+
+### Structured output behavior
+
+<!-- Did the model emit valid JSON envelopes? Field-level compliance? -->
+
+### Prompting issues
+
+<!-- Ambiguities in the strategy schema the model struggled with. -->
+
+### Tool-calling issues
+
+<!-- Read-only market tools: latencies, failures, input validation hits. -->
+
+### Latency
+
+<!-- Measured parse latency p50/p95 (model + full validation pipeline). -->
+
+### Malformed responses
+
+<!-- Real malformed-LLM-response occurrences and how the pipeline handled them. -->
+
+### Prompt injection observations
+
+<!-- Injection attempts tried against the live model and validator outcomes. -->
+
+### Missing SDK/API capabilities
+
+<!-- Gaps relevant to the agent (streaming, tool use, JSON modes). -->
+```
+
 ## Log
 
 ## 2026-09-26 — Phase 2 preparation (documentation and client implementation)
