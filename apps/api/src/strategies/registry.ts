@@ -167,6 +167,22 @@ export class StrategyRegistry {
     }));
   }
 
+  /** Audit-trail events for the proposal pipeline (Phase 5). */
+  async persistProposalEvents(
+    strategyId: string | null,
+    proposalId: string,
+    ticker: string,
+  ): Promise<void> {
+    await this.persistEvents(
+      [
+        { type: "STRATEGY_EVALUATED", detail: { ticker } },
+        { type: "OPPORTUNITY_MATCHED", detail: { ticker } },
+        { type: "PROPOSAL_CREATED", detail: { proposalId, ticker } },
+      ],
+      strategyId,
+    );
+  }
+
   private async persistEvents(events: AgentEvent[], strategyId: string | null): Promise<void> {
     if (events.length === 0) {
       return;

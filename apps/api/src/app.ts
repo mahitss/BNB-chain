@@ -28,6 +28,7 @@ import {
   loadEnvironment,
   loadIntelligenceConfig,
   envOptionalString,
+  envInt,
 } from "@olyr/config";
 import type { HealthCheck } from "@olyr/types";
 import { createTtlCache } from "./cache.js";
@@ -43,6 +44,10 @@ import {
 } from "./strategies/agent-client.js";
 import { loadStrategyLimits } from "./strategies/limits.js";
 import { RegistryValidationError, StrategyRegistry } from "./strategies/registry.js";
+import { HttpRiskEngineClient, type RiskEngineClient } from "./proposals/risk-client.js";
+import { PrismaProposalStore, type PrismaDelegate } from "./proposals/prisma-store.js";
+import { ProposalService } from "./proposals/service.js";
+import { RiskEngineUnavailableError } from "./proposals/risk-client.js";
 
 export const API_VERSION = "0.3.0";
 
@@ -56,6 +61,8 @@ export interface BuildAppOptions {
   agentClient?: AgentClient;
   /** Test seam: inject a Prisma-like client instead of the real one. */
   prisma?: import("./strategies/registry.js").PrismaClientLike;
+  /** Test seam: inject the risk-engine client instead of HTTP transport. */
+  riskClient?: RiskEngineClient;
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
@@ -154,6 +161,38 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const agentClient: AgentClient =
     options.agentClient ??
     new HttpAgentClient(envOptionalString("OLYR_AGENT_URL") ?? "http://localhost:8000");
+
+  // Trade proposals (Phase 5): built from validated strategies + Phase 3
+  // market data; risk decisions come exclusively from the Rust engine.
+  let proposalService: ProposalService | null = null;
+  const prismaDelegate = (options.prisma ?? prisma) as unknown as PrismaDelegate | null;
+  if (prismaDelegate) {
+    proposalService = new ProposalService(
+      new PrismaProposalStore(prismaDelegate),
+      options.riskClient ??
+        new HttpRiskEngineClient(envOptionalString("OLYR_RISK_URL") ?? "http://localhost:8002"),
+      envInt("OLYR_PROPOSAL_TTL_SECONDS", 300),
+    );
+  }
+
+  const requireProposals = (): ProposalService => {
+    if (!proposalService) {
+      throw Object.assign(
+        new Error("Proposal pipeline not configured: set DATABASE_URL (see .env.example)"),
+        {
+          statusCode: 503,
+          payload: {
+            error: {
+              category: "not-configured",
+              message:
+                "Proposal pipeline requires DATABASE_URL (PostgreSQL). See .env.example and docker-compose.yml.",
+            },
+          },
+        },
+      );
+    }
+    return proposalService;
+  };
 
   const notConfiguredResponse = () => ({
     error: {
@@ -360,6 +399,105 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       strategyId: request.params.id,
       events: await registry!.events(request.params.id),
     };
+  });
+
+  // ---- Trade proposal pipeline (Phase 5) ---------------------------------
+
+  app.post<{ Body: { strategyId?: string; ticker?: string } }>(
+    "/api/proposals",
+    async (request, reply) => {
+      const proposals = requireProposals();
+      const strategyId =
+        typeof request.body?.strategyId === "string" ? request.body.strategyId : null;
+      const ticker = typeof request.body?.ticker === "string" ? request.body.ticker : null;
+      // Resolve the strategy definition: by id from the registry, or inline
+      // validated strategy? Only registry strategies can create proposals.
+      let definition: import("@olyr/types").StrategyDefinition | null = null;
+      if (strategyId) {
+        const record = await requireRegistry().get(strategyId);
+        if (!record) {
+          return reply
+            .code(404)
+            .send({ error: { category: "not-found", message: "Strategy not found" } });
+        }
+        definition = record.definition;
+      }
+      if (!definition && ticker) {
+        // Fall back to the latest scanner opportunity for the ticker.
+        definition = null;
+      }
+      if (!definition) {
+        return reply.code(400).send({
+          error: {
+            category: "invalid-request",
+            message: "Provide strategyId (a saved strategy) to create a proposal",
+          },
+        });
+      }
+      // Latest market snapshot from market intelligence — OPTIONAL: without
+      // Binance data the proposal is still created and the risk engine will
+      // reject (missing price) rather than the pipeline inventing numbers.
+      const snapshot = marketService
+        ? await marketService.getSnapshot(definition.asset.ticker)
+        : null;
+      const proposal = await proposals.create(definition, strategyId, snapshot);
+      appLogger.info("proposal.created", { proposalId: proposal.id, asset: proposal.asset });
+      await registry?.persistProposalEvents(strategyId, proposal.id, definition.asset.ticker);
+      return reply.code(201).send(proposal);
+    },
+  );
+
+  app.get("/api/proposals", async () => {
+    return { proposals: await requireProposals().list() };
+  });
+
+  app.get<{ Params: { id: string } }>("/api/proposals/:id", async (request, reply) => {
+    const result = await requireProposals().get(request.params.id);
+    if (!result) {
+      return reply
+        .code(404)
+        .send({ error: { category: "not-found", message: "Proposal not found" } });
+    }
+    return { ...result.proposal, evaluations: result.evaluations };
+  });
+
+  app.post<{ Params: { id: string } }>(
+    "/api/proposals/:id/evaluate-risk",
+    async (request, reply) => {
+      try {
+        return await requireProposals().evaluateStored(request.params.id);
+      } catch (error) {
+        if (error instanceof Error && error.message === "NOT_FOUND") {
+          return reply
+            .code(404)
+            .send({ error: { category: "not-found", message: "Proposal not found" } });
+        }
+        if (error instanceof RiskEngineUnavailableError) {
+          return reply.code(502).send({
+            error: { category: "risk-engine-unavailable", message: error.message },
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string } }>("/api/proposals/:id/re-evaluate", async (request, reply) => {
+    try {
+      return await requireProposals().reevaluate(request.params.id, marketService);
+    } catch (error) {
+      if (error instanceof Error && error.message === "NOT_FOUND") {
+        return reply
+          .code(404)
+          .send({ error: { category: "not-found", message: "Proposal not found" } });
+      }
+      if (error instanceof RiskEngineUnavailableError) {
+        return reply.code(502).send({
+          error: { category: "risk-engine-unavailable", message: error.message },
+        });
+      }
+      throw error;
+    }
   });
 
   app.get<{ Querystring: { chainId?: string; platformId?: string } }>(

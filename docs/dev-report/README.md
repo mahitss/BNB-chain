@@ -174,6 +174,25 @@ To be filled during live verification; do not fabricate observations.
 <!-- Gaps relevant to the agent (streaming, tool use, JSON modes). -->
 ```
 
+## Phase 5 template — Rust risk engine + proposal pipeline
+
+To be filled during live verification; do not fabricate observations.
+
+```markdown
+## YYYY-MM-DD — Risk engine live verification
+
+### Risk Engine
+
+- **Rule design**: [TO BE RECORDED] — how the rule set behaved against real market data.
+- **API boundary**: [TO BE RECORDED] — Fastify→Rust contract behavior under load.
+- **Validation behavior**: [TO BE RECORDED] — malformed-request handling in practice.
+- **Error handling**: [TO BE RECORDED] — timeout/unavailability behavior of the engine.
+- **Latency**: [TO BE RECORDED] — p50/p95 of /evaluate (measured, not estimated).
+- **Integration issues**: [TO BE RECORDED] — anything discovered wiring API↔Rust↔DB.
+- **Binance portfolio-data issues**: [TO BE RECORDED] — portfolio integration pending.
+- **Edge cases discovered**: [TO BE RECORDED]
+```
+
 ## Log
 
 ## 2026-09-26 — Phase 2 preparation (documentation and client implementation)

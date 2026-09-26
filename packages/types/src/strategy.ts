@@ -104,6 +104,12 @@ export const AGENT_EVENT_TYPES = [
   "STRATEGY_SAVED",
   "STRATEGY_ACTIVATED",
   "STRATEGY_PAUSED",
+  // Proposal pipeline audit events (Phase 5)
+  "STRATEGY_EVALUATED",
+  "OPPORTUNITY_MATCHED",
+  "PROPOSAL_CREATED",
+  "RISK_EVALUATION_STARTED",
+  "RISK_EVALUATION_COMPLETED",
 ] as const;
 export type AgentEventType = (typeof AGENT_EVENT_TYPES)[number];
 

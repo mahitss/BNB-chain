@@ -20,6 +20,7 @@ model Strategy {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   events      AgentEvent[]
+  proposals   TradeProposal[]
 
   @@index([ownerId, createdAt])
 }
@@ -33,4 +34,57 @@ model AgentEvent {
   createdAt  DateTime  @default(now())
 
   @@index([strategyId, createdAt])
+}
+
+model TradeProposal {
+  id                       String   @id @default(cuid())
+  strategyId               String?
+  strategy                 Strategy? @relation(fields: [strategyId], references: [id])
+  asset                    String
+  action                   String
+  requestedAmountUsd       Float
+  estimatedPrice           Float?
+  referencePrice           Float?
+  spreadPercent            Float?
+  estimatedSlippagePercent Float?
+  marketState              String?
+  referenceFreshness       String?
+  liquidityStatus          String?
+  currentPositionUsd      Float?
+  dailyTradedUsd           Float?
+  dailyVolumeUsd          Float?
+  referenceAgeSeconds      Float?
+  status                   String   @default("PENDING_RISK")
+  expiresAt                DateTime
+  createdAt                DateTime @default(now())
+  evaluations              RiskEvaluation[]
+
+  @@index([strategyId, createdAt])
+}
+
+model RiskEvaluation {
+  id             String           @id @default(cuid())
+  proposalId     String
+  proposal       TradeProposal    @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  decision       String
+  input          Json
+  rulesPassed    Json
+  rulesFailed    Json
+  warnings       Json
+  requiresReview Json?
+  rulesEvaluated Json?
+  createdAt      DateTime         @default(now())
+  ruleResults    RiskRuleResult[]
+
+  @@index([proposalId, createdAt])
+}
+
+model RiskRuleResult {
+  id           String         @id @default(cuid())
+  evaluationId String
+  evaluation   RiskEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  rule         String
+  outcome      String
+  reason       String?
+  warning      String?
 }

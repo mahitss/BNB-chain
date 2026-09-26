@@ -221,6 +221,42 @@ Security boundary (no exceptions):
   explainer, so the UI can never show an explanation that diverges from the
   persisted strategy.
 
+## Deterministic Risk Engine + Proposal Pipeline (Phase 5)
+
+```
+Validated Strategy (Phase 4 registry)
+      + Market Opportunity / Snapshot (Phase 3)
+      + Portfolio State (unavailable in this phase — represented as null)
+      ↓
+Trade Proposal Builder (Fastify, deterministic)
+      ↓
+Rust Risk Engine  POST /evaluate  (NO LLM, no network egress, no wallet)
+   10 rules: PRICE_SANITY, SPREAD_SANITY, MAX_TRADE_SIZE, DAILY_EXPOSURE,
+   ALLOWED_ASSET, ALLOWED_ACTION, MAX_SLIPPAGE, MARKET_DATA_FRESHNESS,
+   LIQUIDITY, POSITION_LIMIT
+      ↓
+Risk Decision: APPROVED / REJECTED / REQUIRES_REVIEW (+ per-rule reasons)
+      ↓
+TradeProposal + RiskEvaluation + RiskRuleResult persisted (Prisma, audit)
+      ↓
+Frontend /proposals (review only — "EXECUTION NOT ENABLED")
+```
+
+Aggregation: any rule FAILED → REJECTED; else any REQUIRES_REVIEW →
+REQUIRES_REVIEW (unknown liquidity, stale/unknown freshness, unknown
+position); else APPROVED. Decision explanations are generated from the
+structured rule results — never from an LLM.
+
+Security boundaries added in Phase 5:
+
+- Browser → Rust directly: FORBIDDEN (only Fastify calls the engine).
+- Risk engine → transaction execution: DOES NOT EXIST (read-only service).
+- The Rust service never holds Binance credentials; portfolio state arrives
+  as normalized fields (currently null — wallet integration is a later phase).
+- Proposals expire (OLYR_PROPOSAL_TTL_SECONDS); a stale approval reads as
+  EXPIRED and is never executable. Re-evaluation creates NEW evaluation
+  records — historical results are never mutated.
+
 ## Binance integration point (Phase 2, read-only)
 
 All Binance Web3 access is funneled through `packages/binance`
