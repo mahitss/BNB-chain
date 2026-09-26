@@ -1,0 +1,12 @@
+# Link the x86_64-pc-windows-gnu target with rustc's bundled lld and the
+# self-contained MinGW runtime instead of an external gcc from PATH.
+#
+# Reason: some local MinGW-w64 installs (e.g. a trimmed MinGW-Builds gcc in
+# ~/.cargo/bin) are incomplete — missing libkernel32.a / crtend.o — which
+# breaks the default gcc-driven link with:
+#   ld: cannot find -lkernel32 / crtend.o
+# The section only applies when targeting x86_64-pc-windows-gnu, so Linux and
+# macOS builds are unaffected.
+[target.x86_64-pc-windows-gnu]
+linker = "rust-lld"
+rustflags = ["-C", "link-self-contained=yes"]

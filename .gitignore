@@ -1,0 +1,36 @@
+# Dependencies / build output
+node_modules/
+dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Environment — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+
+# Go
+services/execution/bin/
+services/execution/*.exe
+
+# Rust
+services/risk-engine/target/
+
+# Foundry (future contract phases)
+cache/
+out/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log

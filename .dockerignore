@@ -1,0 +1,17 @@
+# Applies to build contexts rooted at the repo (web/api images).
+# Service-scoped images (agent/execution/risk-engine) use their own
+# .dockerignore files inside services/*.
+.git
+.github
+docs
+scripts
+services
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+coverage
+.env
+.env.*
+*.md

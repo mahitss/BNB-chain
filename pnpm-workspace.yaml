@@ -1,0 +1,7 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+# pnpm 10+ blocks dependency postinstall scripts unless explicitly allowed.
+# esbuild (used by tsx) links its platform binary in a postinstall step.
+allowBuilds:
+  esbuild: true

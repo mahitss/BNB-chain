@@ -1,0 +1,85 @@
+name: olyr
+
+# Local development stack. Phase 1: every service is independently bootable
+# with a health endpoint; nothing consumes the data stores yet.
+# Host ports reuse the *_PORT variables from .env.example (defaults below);
+# override them there or in the environment when a port is taken locally.
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      OLYR_ENV: ${OLYR_ENV:-development}
+      PORT: "3000"
+    ports:
+      - "${PORT:-3000}:3000"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      OLYR_ENV: ${OLYR_ENV:-development}
+      API_PORT: "4000"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://olyr:olyr@postgres:5432/olyr}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    ports:
+      - "${API_PORT:-4000}:4000"
+
+  agent:
+    build:
+      context: ./services/agent
+    environment:
+      OLYR_ENV: ${OLYR_ENV:-development}
+      AGENT_PORT: "8000"
+    ports:
+      - "${AGENT_PORT:-8000}:8000"
+
+  execution:
+    build:
+      context: ./services/execution
+    environment:
+      OLYR_ENV: ${OLYR_ENV:-development}
+      EXECUTION_PORT: "8001"
+    ports:
+      - "${EXECUTION_PORT:-8001}:8001"
+
+  risk-engine:
+    build:
+      context: ./services/risk-engine
+    environment:
+      OLYR_ENV: ${OLYR_ENV:-development}
+      RISK_ENGINE_PORT: "8002"
+    ports:
+      - "${RISK_ENGINE_PORT:-8002}:8002"
+
+  # Data stores — reserved for the persistence/caching phase.
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-olyr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-olyr}
+      POSTGRES_DB: ${POSTGRES_DB:-olyr}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-olyr}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
