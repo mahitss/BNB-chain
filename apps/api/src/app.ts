@@ -2,11 +2,12 @@
  * OLYR API application factory.
  *
  * Route handlers are thin adapters: validation + service calls only.
- * Business logic lives in services/, Binance access in @olyr/binance.
+ * Business logic lives in services/ and intelligence/, Binance access in
+ * @olyr/binance.
  *
- * Dev mode (requirement 17): without Binance credentials the API starts
- * normally; RWA endpoints return a structured 503 with setup instructions —
- * never fake data.
+ * Dev mode: without Binance credentials the API starts normally; RWA and
+ * market-intelligence endpoints return a structured 503 with setup
+ * instructions — never fake data.
  */
 import Fastify, {
   type FastifyError,
@@ -19,27 +20,34 @@ import {
   BinanceError,
   BinanceNotConfiguredError,
   HttpBinanceRwaClient,
+  type BinanceRwaClient,
   type Logger,
 } from "@olyr/binance";
-import { loadBinanceConfig, loadEnvironment, envOptionalString } from "@olyr/config";
+import {
+  loadBinanceConfig,
+  loadEnvironment,
+  loadIntelligenceConfig,
+  envOptionalString,
+} from "@olyr/config";
 import type { HealthCheck } from "@olyr/types";
-import { createTtlCache, type TtlCache } from "./cache.js";
+import { createTtlCache } from "./cache.js";
 import { RwaService } from "./services/rwa.js";
+import { MarketIntelligenceService } from "./services/market.js";
+import { OpportunityScanner } from "./scanner/scanner.js";
+import { InMemoryScanStore } from "./scanner/store.js";
+import { createDistributedLock } from "./scanner/lock.js";
 
-export const API_VERSION = "0.2.0";
-
-export interface AppComponents {
-  service: RwaService | null;
-  cache: TtlCache;
-  binanceConfigured: boolean;
-  chainId: string;
-  logger: Logger;
-}
+export const API_VERSION = "0.3.0";
 
 const TICKER_PATTERN = /^[A-Za-z0-9._-]{1,20}$/;
 const CONTRACT_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 
-export async function buildApp(): Promise<FastifyInstance> {
+export interface BuildAppOptions {
+  /** Test seam: inject a client instead of the HTTP implementation. */
+  binanceClient?: BinanceRwaClient;
+}
+
+export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: { level: loadEnvironment() === "development" ? "debug" : "info" },
   });
@@ -56,13 +64,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   };
 
   const binanceConfig = loadBinanceConfig();
+  const intelligenceConfig = loadIntelligenceConfig();
   const chainId = envOptionalString("BINANCE_CHAIN_ID") ?? "56";
   const redisUrl = envOptionalString("REDIS_URL");
   const cache = await createTtlCache(redisUrl, appLogger);
+  const store = new InMemoryScanStore();
 
-  const service = binanceConfig
-    ? new RwaService({
-        client: new HttpBinanceRwaClient({
+  const client: BinanceRwaClient | null =
+    options.binanceClient ??
+    (binanceConfig
+      ? new HttpBinanceRwaClient({
           config: {
             apiKey: binanceConfig.apiKey,
             apiSecret: binanceConfig.apiSecret,
@@ -71,14 +82,44 @@ export async function buildApp(): Promise<FastifyInstance> {
             retry: binanceConfig.retry,
           },
           logger: appLogger,
-        }),
+        })
+      : null);
+
+  const service = client
+    ? new RwaService({
+        client,
         cache,
         chainId,
-        metadataTtlSeconds: binanceConfig.cacheTtls.metadataSeconds,
-        priceTtlSeconds: binanceConfig.cacheTtls.priceSeconds,
+        metadataTtlSeconds: binanceConfig?.cacheTtls.metadataSeconds ?? 300,
+        priceTtlSeconds: binanceConfig?.cacheTtls.priceSeconds ?? 15,
         logger: appLogger,
       })
     : null;
+
+  const marketService =
+    service && client
+      ? new MarketIntelligenceService({
+          rwaService: service,
+          client,
+          config: intelligenceConfig,
+          chainId,
+          store,
+          logger: appLogger,
+        })
+      : null;
+
+  const scanner =
+    service && client && intelligenceConfig.scan.enabled
+      ? new OpportunityScanner({
+          client,
+          store,
+          config: intelligenceConfig,
+          chainId,
+          logger: appLogger,
+          distributedLock: (await createDistributedLock(redisUrl, appLogger)) ?? undefined,
+        })
+      : null;
+  scanner?.start();
 
   const notConfiguredResponse = () => ({
     error: {
@@ -138,6 +179,16 @@ export async function buildApp(): Promise<FastifyInstance> {
       });
     }
     return service;
+  };
+
+  const requireMarketService = (): MarketIntelligenceService => {
+    if (!marketService) {
+      throw Object.assign(new Error("Binance credentials not configured"), {
+        statusCode: 503,
+        payload: notConfiguredResponse(),
+      });
+    }
+    return marketService;
   };
 
   app.get<{ Querystring: { chainId?: string; platformId?: string } }>(
@@ -211,6 +262,83 @@ export async function buildApp(): Promise<FastifyInstance> {
     return { platforms: await requireService().listPlatforms() };
   });
 
+  // ---- Market intelligence (Phase 3) ------------------------------------
+
+  /** Global banner: US equities calendar state + on-chain observability. */
+  app.get("/api/market/state", async () => {
+    return requireMarketService().getGlobalState();
+  });
+
+  app.get<{ Params: { ticker: string } }>(
+    "/api/market/:ticker/snapshot",
+    async (request, reply) => {
+      requireTicker(request.params.ticker);
+      const snapshot = await requireMarketService().getSnapshot(request.params.ticker);
+      if (!snapshot) {
+        return reply.code(404).send({
+          error: {
+            category: "not-found",
+            message: `No tokenized asset found for ticker ${request.params.ticker} on chain ${chainIdOf()}`,
+          },
+        });
+      }
+      return snapshot;
+    },
+  );
+
+  app.get<{ Params: { ticker: string } }>("/api/market/:ticker/state", async (request, reply) => {
+    requireTicker(request.params.ticker);
+    const snapshot = await requireMarketService().getSnapshot(request.params.ticker);
+    if (!snapshot) {
+      return reply.code(404).send({
+        error: {
+          category: "not-found",
+          message: `No tokenized asset found for ticker ${request.params.ticker} on chain ${chainIdOf()}`,
+        },
+      });
+    }
+    return {
+      ticker: snapshot.ticker,
+      marketState: snapshot.marketState,
+      marketStateSource: snapshot.marketStateSource,
+      warnings: snapshot.warnings,
+      dataSource: snapshot.source,
+      timestamp: snapshot.timestamp,
+    };
+  });
+
+  /** Latest scanner results (empty until the first scan completes). */
+  app.get("/api/opportunities", async () => {
+    requireMarketService();
+    const latest = store.latest();
+    return {
+      timestamp: new Date().toISOString(),
+      dataSource: "binance-web3",
+      lastScanAt: latest.completedAt,
+      opportunities: latest.opportunities,
+    };
+  });
+
+  app.get<{ Params: { ticker: string } }>("/api/opportunities/:ticker", async (request, reply) => {
+    requireMarketService();
+    requireTicker(request.params.ticker);
+    const fromStore = store.latestForTicker(request.params.ticker);
+    if (fromStore) {
+      return { ...fromStore, dataSource: "binance-web3" };
+    }
+    // Not covered by the last scan: evaluate on demand.
+    const evaluated = await requireMarketService().getOpportunity(request.params.ticker);
+    if (!evaluated) {
+      return reply.code(404).send({
+        error: {
+          category: "not-found",
+          message: `No tokenized asset found for ticker ${request.params.ticker} on chain ${chainIdOf()}`,
+        },
+      });
+    }
+    return { ...evaluated, dataSource: "binance-web3" };
+  });
+
   // Validate query/param shapes up front; business errors come from services.
   function requireTicker(ticker: string): void {
     if (!TICKER_PATTERN.test(ticker)) {
@@ -255,9 +383,17 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   app.addHook("onClose", async () => {
+    await scanner?.stop();
     await cache.close();
   });
 
-  app.log.info({ environment, binanceConfigured: Boolean(binanceConfig) }, "api.components_built");
+  app.log.info(
+    {
+      environment,
+      binanceConfigured: Boolean(binanceConfig),
+      scannerEnabled: Boolean(scanner),
+    },
+    "api.components_built",
+  );
   return app;
 }

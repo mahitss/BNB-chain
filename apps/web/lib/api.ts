@@ -23,7 +23,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function get<T>(path: string): Promise<T> {
+export async function get<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { headers: { Accept: "application/json" } });
   const text = await response.text();
   let body: unknown;

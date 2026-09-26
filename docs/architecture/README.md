@@ -151,6 +151,38 @@ bootable process with a health endpoint.
 - **Containers run non-root.** All service images drop to an unprivileged
   user.
 
+## Market Intelligence (Phase 3, deterministic)
+
+Phase 3 turns the Phase 2 data feed into a deterministic market-intelligence
+layer — no LLM participates in any numeric or risk decision:
+
+```
+Binance RWA Data + Binance Market Data (top-liquidity)
+      ↓
+Market Intelligence modules (apps/api/src/intelligence/*)
+  · us-equity-calendar.ts — the ONLY wall-clock logic: documented NYSE rules
+    (09:30–16:00 America/New_York, Mon–Fri, published holiday list 2025–2027)
+  · market-state.ts — Binance statusInfo is the PRIMARY source (OPEN /
+    PRE_MARKET / AFTER_HOURS / CLOSED); the calendar only refines
+    closed → WEEKEND vs HOLIDAY and fills gaps (UNKNOWN)
+  · freshness.ts — FRESH / AGING / STALE / UNKNOWN from configurable
+    thresholds; missing timestamps are UNKNOWN, never invented
+  · spread (in @olyr/types) — scaled-BigInt decimal arithmetic, exact
+    absolute spread, percent rounded half-away-from-zero; NaN/∞ impossible
+  · opportunity.ts — deterministic decision table (NO_SIGNAL / WATCH /
+    OPPORTUNITY / BLOCKED / DATA_UNAVAILABLE) with per-signal reasons,
+    warnings, and a documented confidence rule
+      ↓
+OpportunityScanner (bounded interval, local + Redis-NX overlap lock,
+graceful shutdown, capped universe size) → InMemoryScanStore
+(Prisma persistence arrives with the database phase)
+      ↓
+API /api/market/*, /api/opportunities/* → OLYR Terminal (/markets)
+```
+
+Read-only: this layer produces information only — no signing, no swaps, no
+broadcasts, no wallet access.
+
 ## Binance integration point (Phase 2, read-only)
 
 All Binance Web3 access is funneled through `packages/binance`

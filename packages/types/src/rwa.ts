@@ -10,6 +10,9 @@
  */
 
 /** Issuance platform ids confirmed by the API docs. New ids may appear. */
+import { parseDecimal, rescale, roundDiv, formatDecimal } from "./decimal.js";
+import type { DivergenceDirection, PriceDivergence } from "./market.js";
+
 export type KnownRwaPlatformId = "ondo" | "bstock";
 
 /** Underlying asset type as returned by the API. 1=Stock, 2=Pre-IPO, 3=ETF. */
@@ -107,40 +110,78 @@ export interface Spread {
  * Deterministic spread: ((onChain - reference) / reference) * 100.
  * No LLM involvement. Returns an invalidReason instead of throwing for
  * zero reference price, missing values, or non-numeric input.
+ *
+ * Arithmetic uses scaled BigInt decimals (see ./decimal.ts) — never binary
+ * floating point — so identical inputs always produce identical outputs and
+ * NaN/Infinity cannot occur.
  */
 export function calculateSpread(
   onChain: string | null | undefined,
   reference: string | null | undefined,
 ): Spread {
+  const divergence = calculatePriceDivergence(onChain, reference);
+  return {
+    percent: divergence.spreadPercent,
+    bps: divergence.spreadBps,
+    invalidReason: divergence.invalidReason as SpreadInvalidReason | null,
+  };
+}
+
+/**
+ * Full deterministic divergence: percent, absolute difference, bps, and
+ * direction. Absolute spread is exact (on-chain − reference at the finer of
+ * the two input scales). Percent/bps are rounded half-away-from-zero to 4
+ * and 2 decimal places respectively.
+ */
+export function calculatePriceDivergence(
+  onChain: string | null | undefined,
+  reference: string | null | undefined,
+): PriceDivergence {
   if (onChain === null || onChain === undefined || onChain === "") {
-    return invalid("missing-onchain-price");
+    return noDivergence("missing-onchain-price");
   }
   if (reference === null || reference === undefined || reference === "") {
-    return invalid("missing-reference-price");
+    return noDivergence("missing-reference-price");
   }
-  const on = Number(onChain);
-  const ref = Number(reference);
-  if (!Number.isFinite(on)) {
-    return invalid("invalid-number");
+  const on = parseDecimal(onChain);
+  const ref = parseDecimal(reference);
+  if (!on || !ref) {
+    return noDivergence("invalid-number");
   }
-  if (!Number.isFinite(ref)) {
-    return invalid("invalid-number");
+  if (on.value < 0n || ref.value < 0n) {
+    return noDivergence("invalid-number");
   }
-  if (ref === 0) {
-    return invalid("zero-reference-price");
+  if (ref.value === 0n) {
+    return noDivergence("zero-reference-price");
   }
-  // Round via integer shift to keep the rounding rule explicit and stable.
-  const percent = Math.round(((on - ref) / ref) * 100 * 1e4) / 1e4;
-  const bps = Math.round(((on - ref) / ref) * 1e4 * 1e2) / 1e2;
+  const scale = Math.max(on.scale, ref.scale);
+  const diff = rescale(on.value, on.scale, scale) - rescale(ref.value, ref.scale, scale);
+  const direction: DivergenceDirection = diff > 0n ? "PREMIUM" : diff < 0n ? "DISCOUNT" : "NONE";
+
+  // percent = diff / ref * 100; bps = percent * 100. Rounded half-away-from-zero.
+  const percentUnits = roundDiv(diff * 100n * 10n ** 4n, refScaledTo(ref, scale));
+  const bpsUnits = roundDiv(diff * 10000n * 10n ** 2n, refScaledTo(ref, scale));
   return {
-    percent: percent.toFixed(4),
-    bps: bps.toFixed(2),
+    spreadPercent: formatDecimal(percentUnits, 4),
+    spreadAbsolute: formatDecimal(diff, scale),
+    spreadBps: formatDecimal(bpsUnits, 2),
+    direction,
     invalidReason: null,
   };
 }
 
-function invalid(reason: SpreadInvalidReason): Spread {
-  return { percent: null, bps: null, invalidReason: reason };
+function refScaledTo(ref: { value: bigint; scale: number }, scale: number): bigint {
+  return rescale(ref.value, ref.scale, scale);
+}
+
+function noDivergence(reason: string): PriceDivergence {
+  return {
+    spreadPercent: null,
+    spreadAbsolute: null,
+    spreadBps: null,
+    direction: "NONE",
+    invalidReason: reason,
+  };
 }
 
 /** RWA token issuance platform, from `GET /rwa/platforms`. */
@@ -240,4 +281,13 @@ export interface TokenizedAssetListing {
   tokenPrice: PriceValue | null;
   referencePrice: PriceValue | null;
   statusInfo: RwaMarketStatusInfo | null;
+}
+
+/** One on-chain liquidity pool, from GET /dex/market/token/top-liquidity. */
+export interface TokenLiquidityPool {
+  pool: string;
+  protocolName: string | null;
+  /** Pool liquidity in USD as a decimal string. */
+  liquidityUsd: string | null;
+  poolAddress: string | null;
 }

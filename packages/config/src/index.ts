@@ -88,3 +88,5 @@ export {
   type BinanceCacheTtls,
   type BinanceConfig,
 } from "./binance.js";
+
+export { loadIntelligenceConfig, type IntelligenceConfig } from "./intelligence.js";

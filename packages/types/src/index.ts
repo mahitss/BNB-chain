@@ -47,3 +47,5 @@ export interface PriceSpread {
 // here once the agent → risk-engine → execution flow is implemented.
 
 export * from "./rwa.js";
+export * from "./market.js";
+export { parseDecimal, formatDecimal, rescale, roundDiv } from "./decimal.js";

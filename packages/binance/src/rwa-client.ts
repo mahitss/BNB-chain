@@ -12,6 +12,7 @@ import type {
   RwaPriceQuote,
   RwaSearchResult,
   TokenizedAssetListing,
+  TokenLiquidityPool,
   UnderlyingMarketSnapshot,
 } from "@olyr/types";
 import {
@@ -34,6 +35,7 @@ import {
   normalizePlatform,
   normalizePriceQuote,
   normalizeSearchResult,
+  normalizeLiquidityPools,
   normalizeTokenListing,
   normalizeUnderlyingMarket,
   normalizeUnderlyingProfile,
@@ -44,6 +46,7 @@ import type {
   RawRwaPrice,
   RawRwaSearchResult,
   RawRwaToken,
+  RawTokenLiquidityPool,
   RawRwaUnderlyingMarket,
   RawRwaUnderlyingProfile,
 } from "./raw.js";
@@ -83,6 +86,11 @@ export interface BinanceRwaClient {
   searchTokens(keyword: string, platformId?: string): Promise<RwaSearchResult[]>;
   /** GET /rwa/underlying-profile — company info for a token. */
   getUnderlyingProfile(chainId: string, tokenContractAddress: string): Promise<AssetProfile>;
+  /**
+   * GET /dex/market/token/top-liquidity — documented on-chain liquidity pools
+   * for a token (General Data section of the Market API).
+   */
+  getTokenLiquidity(chainId: string, tokenContractAddress: string): Promise<TokenLiquidityPool[]>;
   /** GET /rwa/underlying-market — market data + status for a token. */
   getUnderlyingMarketData(
     chainId: string,
@@ -179,6 +187,18 @@ export class HttpBinanceRwaClient implements BinanceRwaClient {
       { binanceChainId: chainId, tokenContractAddress },
     );
     return normalizeUnderlyingProfile(data);
+  }
+
+  async getTokenLiquidity(
+    chainId: string,
+    tokenContractAddress: string,
+  ): Promise<TokenLiquidityPool[]> {
+    const { data } = await this.request<RawTokenLiquidityPool[]>(
+      "getTokenLiquidity",
+      "/api/v1/dex/market/token/top-liquidity",
+      { binanceChainId: chainId, tokenContractAddress },
+    );
+    return normalizeLiquidityPools(data);
   }
 
   async getUnderlyingMarketData(

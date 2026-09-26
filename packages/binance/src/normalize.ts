@@ -14,6 +14,7 @@ import {
   type RwaSearchResult,
   type TokenizedAsset,
   type TokenizedAssetListing,
+  type TokenLiquidityPool,
   type UnderlyingMarketSnapshot,
 } from "@olyr/types";
 import { BinanceMalformedResponseError } from "./errors.js";
@@ -258,4 +259,17 @@ export function normalizeUnderlyingMarket(raw: RawRwaUnderlyingMarket): Underlyi
       latestDividend: market ? pick(market.latestDividend) : null,
     },
   };
+}
+
+export function normalizeLiquidityPools(
+  raw: Array<{ pool: unknown; protocolName: unknown; liquidityUsd: unknown; poolAddress: unknown }>,
+): TokenLiquidityPool[] {
+  return raw
+    .filter((entry) => typeof entry.pool === "string")
+    .map((entry) => ({
+      pool: entry.pool as string,
+      protocolName: asString(entry.protocolName),
+      liquidityUsd: asString(entry.liquidityUsd),
+      poolAddress: asString(entry.poolAddress),
+    }));
 }

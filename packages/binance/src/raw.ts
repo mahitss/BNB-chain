@@ -118,3 +118,10 @@ export interface RawRwaUnderlyingMarket {
     latestDividend: string | null;
   } | null;
 }
+
+export interface RawTokenLiquidityPool {
+  pool: string;
+  protocolName: string | null;
+  liquidityUsd: string | null;
+  poolAddress: string | null;
+}

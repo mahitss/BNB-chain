@@ -107,6 +107,29 @@ measurements:
 <!-- Gaps in the official SDKs/connectors vs the REST API. -->
 ```
 
+## Phase 3 template — market-hours intelligence + opportunity engine
+
+To be filled during live verification; do not fabricate observations.
+
+```markdown
+## YYYY-MM-DD — Market intelligence live verification
+
+### Market Data
+
+- **Endpoint used**: [TO BE RECORDED DURING LIVE TEST]
+- **Response latency**: [TO BE RECORDED DURING LIVE TEST]
+- **Price freshness**: [TO BE RECORDED DURING LIVE TEST]
+- **Missing fields**: [TO BE RECORDED DURING LIVE TEST]
+- **Market-hours behavior**: [TO BE RECORDED DURING LIVE TEST]
+- **Observed liquidity behavior**: [TO BE RECORDED DURING LIVE TEST]
+- **Documentation clarity**: [TO BE RECORDED DURING LIVE TEST]
+
+### Deterministic-engine observations
+
+<!-- Threshold behavior, freshness buckets, scanner interval, anything that
+     differs from the documented assumptions. Only real observations. -->
+```
+
 ## Log
 
 ## 2026-09-26 — Phase 2 preparation (documentation and client implementation)
