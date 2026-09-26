@@ -1,0 +1,10 @@
+# Normalize all text files to LF so shell scripts (scripts/*.sh) and language
+# tooling behave identically across Windows/Linux checkouts.
+* text=auto eol=lf
+
+# Binary assets (future-proofing)
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
