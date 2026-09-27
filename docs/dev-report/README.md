@@ -223,6 +223,49 @@ To be filled during live verification; do not fabricate observations.
 - **Edge cases**: [TO BE RECORDED]
 ```
 
+## Phase 7 template — Agentic Wallet, Wallet Skills, Agent Studio, b402
+
+To be filled during live verification; do not fabricate observations.
+
+```markdown
+## YYYY-MM-DD — Agentic Wallet live verification
+
+### Agentic Wallet
+
+- **Installation experience**: [TO BE RECORDED] — npx skills add, baw CLI setup.
+- **SDK behavior**: [TO BE RECORDED] — baw CLI command surface (SKILL.md).
+- **Identity**: [TO BE RECORDED] — QR sign-in, pairing, session behavior.
+- **Wallet provisioning**: [TO BE RECORDED] — Agentic Wallet creation in the App.
+- **Execution flow**: [TO BE RECORDED] — quote → confirm → submit via NL.
+- **Errors**: [TO BE RECORDED]
+- **Latency**: [TO BE RECORDED]
+- **Documentation issues**: [TO BE RECORDED]
+
+### Wallet Skills
+
+- **Installation**: [TO BE RECORDED]
+- **Available skills**: [TO BE RECORDED] — which of the 12 documented skills were usable.
+- **Missing skills**: [TO BE RECORDED]
+- **Tool behavior**: [TO BE RECORDED]
+- **Integration issues**: [TO BE RECORDED]
+
+### Agent Studio
+
+- **Setup experience**: [TO BE RECORDED]
+- **Runtime behavior**: [TO BE RECORDED]
+- **MCP integration if tested**: [TO BE RECORDED]
+- **Missing capabilities**: [TO BE RECORDED]
+
+### b402
+
+- **Documentation review**: done — x402 V2 on BSC, verify/settle flow, gas-sponsored
+  settlement, EIP-3009/Permit2 authorizations. OLYR keeps payments DISABLED and off
+  the trading path; PaymentProvider seam exists in services/agent.
+- **Possible use case**: agent pays external services for market intelligence or
+  specialized inference. Never for risk/execution.
+- **Whether tested**: NOT TESTED — disabled by design in this phase.
+```
+
 ## Log
 
 ## 2026-09-26 — Phase 2 preparation (documentation and client implementation)

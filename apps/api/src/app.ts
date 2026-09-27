@@ -54,6 +54,9 @@ import {
   type ExecutionDeps,
 } from "./executions/routes.js";
 import type { BinanceTradingClient } from "@olyr/binance";
+import { registerWalletRoutes, type WalletDeps } from "./wallet/routes.js";
+import { BawCliWalletProvider } from "./wallet/providers.js";
+import { StrategyLoopWorker } from "./wallet/strategy-loop.js";
 
 export const API_VERSION = "0.3.0";
 
@@ -211,6 +214,81 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   if (executionStore) {
     registerExecutionRoutes(app, executionDeps, executionStore);
   }
+
+  // Wallet + agent-status routes (Phase 7) + the bounded agent loop.
+  const walletLimits = loadStrategyLimits();
+  registerWalletRoutes(app, {
+    provider: new BawCliWalletProvider({}),
+    policyMode: executionDeps.policyMode,
+    limits: { ...walletLimits, maxSlippagePercent: envInt("OLYR_MAX_SLIPPAGE_PERCENT", 1) },
+    binanceConfigured: Boolean(binanceConfig),
+  } satisfies WalletDeps);
+
+  let strategyLoop: StrategyLoopWorker | null = null;
+  if (service && executionStore && intelligenceConfig.scan.enabled) {
+    strategyLoop = new StrategyLoopWorker({
+      registry: registry!,
+      proposals: {
+        create: (definition, strategyId, snapshot) => {
+          const svc = requireProposals();
+          return svc.create(definition, strategyId, snapshot);
+        },
+        updateProposalStatus: async (id, status) => {
+          // Delegate to the proposal service's store through its public method.
+          await requireProposals().updateStatus(id, status);
+        },
+      },
+      riskClient:
+        options.riskClient ??
+        new (await import("./proposals/risk-client.js")).HttpRiskEngineClient(
+          envOptionalString("OLYR_RISK_URL") ?? "http://localhost:8002",
+        ),
+      tradingClient: executionDeps.tradingClient,
+      executionStore,
+      marketService: marketService!,
+      intelligenceConfig,
+      policy: {
+        mode: executionDeps.policyMode,
+        maxTradeUsd: walletLimits.maxStrategyTradeUsd,
+        maxDailyUsd: walletLimits.maxStrategyDailyUsd,
+        maxSlippagePercent: envInt("OLYR_MAX_SLIPPAGE_PERCENT", 1),
+        allowedAssets: envOptionalString("OLYR_ALLOWED_ASSETS")
+          ? envOptionalString("OLYR_ALLOWED_ASSETS")!
+              .split(",")
+              .map((s) => s.trim().toUpperCase())
+              .filter(Boolean)
+          : [],
+        allowedActions: envOptionalString("OLYR_ALLOWED_ACTIONS")
+          ? envOptionalString("OLYR_ALLOWED_ACTIONS")!
+              .split(",")
+              .map((s) => s.trim().toUpperCase())
+              .filter(Boolean)
+          : [],
+        requireHumanApprovalAboveUsd: envInt("OLYR_REQUIRE_HUMAN_APPROVAL_ABOVE_USD", 10),
+      },
+      limits: walletLimits,
+      cooldownSeconds: envInt("OLYR_STRATEGY_COOLDOWN_SECONDS", 900),
+      intervalSeconds: envInt("OLYR_STRATEGY_LOOP_SECONDS", 300),
+      chainId,
+      logger: appLogger,
+    });
+    strategyLoop.start();
+  }
+
+  app.get("/api/agent/status", async () => {
+    const strategies = registry ? await registry.list() : [];
+    const active = strategies.filter((s) => s.status === "ACTIVE");
+    const latest = store.latest();
+    return {
+      loopEnabled: strategyLoop !== null,
+      executionPolicy: executionDeps.policyMode,
+      activeStrategies: active.length,
+      totalStrategies: strategies.length,
+      lastScanAt: latest.completedAt,
+      opportunities: latest.opportunities,
+      timestamp: new Date().toISOString(),
+    };
+  });
 
   const requireProposals = (): ProposalService => {
     if (!proposalService) {
@@ -436,6 +514,30 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       strategyId: request.params.id,
       events: await registry!.events(request.params.id),
     };
+  });
+
+  // ---- Portfolio (Phase 7): honest 503 while the wallet is unconfigured ----
+
+  app.get("/api/portfolio", async (_request, reply) => {
+    requireProposals();
+    return reply.code(503).send({
+      error: {
+        category: "wallet-not-configured",
+        message:
+          "Portfolio requires the Agentic Wallet (baw CLI signed in). Install per docs/dev-report and set OLYR_WALLET_* configuration.",
+      },
+    });
+  });
+
+  app.get<{ Params: { ticker: string } }>("/api/portfolio/:ticker", async (request, reply) => {
+    requireTicker(request.params.ticker);
+    requireProposals();
+    return reply.code(503).send({
+      error: {
+        category: "wallet-not-configured",
+        message: "Portfolio requires the Agentic Wallet (baw CLI signed in).",
+      },
+    });
   });
 
   // ---- Trade proposal pipeline (Phase 5) ---------------------------------
@@ -729,6 +831,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   app.addHook("onClose", async () => {
+    await strategyLoop?.stop();
     await scanner?.stop();
     await cache.close();
     await prisma?.$disconnect();

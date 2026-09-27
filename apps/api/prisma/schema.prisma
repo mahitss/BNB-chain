@@ -157,3 +157,63 @@ model Execution {
   updatedAt       DateTime @updatedAt
 }
 
+
+model AgentWallet {
+  id           String   @id @default(cuid())
+  ownerId      String   @unique
+  provider     String   @default("binance-agentic-wallet")
+  address      String?
+  network      String?
+  status       String   @default("NOT_CONFIGURED")
+  capabilities Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ExecutionPolicy {
+  id                            String   @id @default(cuid())
+  ownerId                       String   @unique
+  mode                          String   @default("MANUAL")
+  maxTradeUsd                   Float
+  maxDailyUsd                   Float
+  maxSlippagePercent            Float
+  allowedAssets                 Json
+  allowedActions                Json
+  requireHumanApprovalAboveUsd  Float
+  version                       Int      @default(1)
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  history                       ExecutionPolicyVersion[]
+
+  @@index([ownerId])
+}
+
+model ExecutionPolicyVersion {
+  id                            String   @id @default(cuid())
+  policyId                      String
+  policy                        ExecutionPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  version                       Int
+  mode                          String
+  maxTradeUsd                   Float
+  maxDailyUsd                   Float
+  maxSlippagePercent            Float
+  allowedAssets                 Json
+  allowedActions                Json
+  requireHumanApprovalAboveUsd  Float
+  createdAt                     DateTime @default(now())
+}
+
+model AgentCapability {
+  id                   String   @id @default(cuid())
+  ownerId              String
+  canReadMarketData    Boolean  @default(true)
+  canReadWallet        Boolean  @default(false)
+  canReadPortfolio     Boolean  @default(false)
+  canRequestQuotes     Boolean  @default(false)
+  canSimulateTransactions Boolean @default(false)
+  canExecuteTrades     Boolean  @default(false)
+  walletConfigured     Boolean  @default(false)
+  policyMode           String
+  computedAt           DateTime @default(now())
+}
+

@@ -69,7 +69,8 @@ export function registerExecutionRoutes(
       void reply.code(503).send({
         error: {
           category: "not-configured",
-          message: "Binance Web3 API credentials are not configured; quotes, simulation and broadcast are unavailable (see .env.example).",
+          message:
+            "Binance Web3 API credentials are not configured; quotes, simulation and broadcast are unavailable (see .env.example).",
         },
       });
       return false;
@@ -141,11 +142,9 @@ export function registerExecutionRoutes(
         userWalletAddress: deps.executorAddress ?? undefined,
       });
       if (routes.length === 0) {
-        return reply
-          .code(502)
-          .send({
-            error: { category: "quote-unavailable", message: "No vendor returned a quote" },
-          });
+        return reply.code(502).send({
+          error: { category: "quote-unavailable", message: "No vendor returned a quote" },
+        });
       }
       const best = routes[0]!;
       const quote = await quoteService.recordQuote(proposalId, {
@@ -195,23 +194,19 @@ export function registerExecutionRoutes(
     }
     const existingQuote = await quoteService.latestQuote(proposalId);
     if (!existingQuote || Date.parse(existingQuote.quote.expiresAt) < Date.now()) {
-      return reply
-        .code(409)
-        .send({
-          error: {
-            category: "invalid-state",
-            message: "Quote missing or expired — fetch a fresh quote first",
-          },
-        });
+      return reply.code(409).send({
+        error: {
+          category: "invalid-state",
+          message: "Quote missing or expired — fetch a fresh quote first",
+        },
+      });
     }
     const quote = existingQuote.quote;
     const bestRoute = quote.routes[0];
     if (!bestRoute?.vendorName) {
-      return reply
-        .code(502)
-        .send({
-          error: { category: "quote-unavailable", message: "Stored quote has no vendor route" },
-        });
+      return reply.code(502).send({
+        error: { category: "quote-unavailable", message: "Stored quote has no vendor route" },
+      });
     }
     if (!requireTradingClient(reply)) return;
     try {
@@ -253,20 +248,18 @@ export function registerExecutionRoutes(
         existingQuote.id,
         simulation,
       );
-      return reply
-        .code(201)
-        .send({
-          ...stored,
-          swap: {
-            mode: swap.mode,
-            toTokenAmount: swap.toTokenAmount,
-            minReceiveAmount: swap.minReceiveAmount,
-            slippagePercent: swap.slippagePercent,
-            priceImpactPercent: swap.priceImpactPercent,
-            tradeFeeUsd: swap.tradeFeeUsd,
-            estimateGasFee: swap.estimateGasFee,
-          },
-        });
+      return reply.code(201).send({
+        ...stored,
+        swap: {
+          mode: swap.mode,
+          toTokenAmount: swap.toTokenAmount,
+          minReceiveAmount: swap.minReceiveAmount,
+          slippagePercent: swap.slippagePercent,
+          priceImpactPercent: swap.priceImpactPercent,
+          tradeFeeUsd: swap.tradeFeeUsd,
+          estimateGasFee: swap.estimateGasFee,
+        },
+      });
     } catch (error) {
       app.log.error(
         { message: error instanceof Error ? error.message : String(error) },
@@ -287,11 +280,9 @@ export function registerExecutionRoutes(
     // Simulations are exposed through the proposal record; kept for the
     // documented surface. Fetching a single simulation by id is not needed by
     // any current flow — 501 makes that explicit instead of faking it.
-    return reply
-      .code(501)
-      .send({
-        error: { category: "not-implemented", message: "Fetch simulations via the proposal" },
-      });
+    return reply.code(501).send({
+      error: { category: "not-implemented", message: "Fetch simulations via the proposal" },
+    });
   });
 
   // ---- Authorization ------------------------------------------------------
@@ -432,14 +423,12 @@ export function registerExecutionRoutes(
       typeof signedTransaction !== "string" ||
       !signedTransaction.startsWith("0x")
     ) {
-      return reply
-        .code(400)
-        .send({
-          error: {
-            category: "invalid-request",
-            message: "executionId and signedTransaction (0x…) are required",
-          },
-        });
+      return reply.code(400).send({
+        error: {
+          category: "invalid-request",
+          message: "executionId and signedTransaction (0x…) are required",
+        },
+      });
     }
     const execution = await executionService.get(executionId);
     if (!execution) {
@@ -504,14 +493,12 @@ export function registerExecutionRoutes(
       typeof vendor !== "string" ||
       typeof quoteId !== "string"
     ) {
-      return reply
-        .code(400)
-        .send({
-          error: {
-            category: "invalid-request",
-            message: "executionId, userSignature, vendor, quoteId are required",
-          },
-        });
+      return reply.code(400).send({
+        error: {
+          category: "invalid-request",
+          message: "executionId, userSignature, vendor, quoteId are required",
+        },
+      });
     }
     try {
       const order = await deps.tradingClient.submitRfqOrder({
@@ -552,11 +539,9 @@ export function registerExecutionRoutes(
       if (!requireInternalToken(request, reply)) return;
       const { executionId, state, failureReason } = request.body ?? {};
       if (typeof executionId !== "string" || typeof state !== "string") {
-        return reply
-          .code(400)
-          .send({
-            error: { category: "invalid-request", message: "executionId and state are required" },
-          });
+        return reply.code(400).send({
+          error: { category: "invalid-request", message: "executionId and state are required" },
+        });
       }
       try {
         const current = await executionService.get(executionId);

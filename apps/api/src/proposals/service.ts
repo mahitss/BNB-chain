@@ -205,6 +205,11 @@ export class ProposalService {
     };
   }
 
+  /** Status update used by the bounded agent loop after risk evaluation. */
+  async updateStatus(id: string, status: string): Promise<void> {
+    await this.store.updateProposalStatus(id, status);
+  }
+
   /** Evaluate a stored proposal: reuses the EXACT stored inputs (audit-safe). */
   async evaluateStored(id: string): Promise<{ proposal: TradeProposal; decision: RiskDecision }> {
     const row = await this.store.getProposal(id);

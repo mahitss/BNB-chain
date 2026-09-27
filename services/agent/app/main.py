@@ -86,11 +86,20 @@ def create_app(config: AgentConfig | None = None) -> FastAPI:
         return await agent.parse(request.text)
 
     # Read-only tools exposed over the internal contract; they proxy the OLYR
-    # API with validated inputs. No write tools exist in this service.
+    # API with validated inputs. Controlled tools accept ids only — every
+    # state/authorization check happens server-side in Fastify.
     @app.get("/agent/tools/{tool_name}")
-    async def run_tool(tool_name: str, ticker: str | None = None) -> dict:
+    async def run_tool(
+        tool_name: str, ticker: str | None = None, amount_usd: float | None = None
+    ) -> dict:
         if tool_name == "list_tokenized_assets":
             return await tools.list_tokenized_assets()
+        if tool_name == "get_portfolio":
+            return await tools.get_portfolio()
+        if tool_name == "get_quote":
+            if ticker is None or amount_usd is None:
+                raise HTTPException(status_code=400, detail="ticker and amount_usd required")
+            return await tools.get_quote(ticker, amount_usd)
         if ticker is None:
             raise HTTPException(status_code=400, detail="ticker parameter required")
         if tool_name == "get_tokenized_asset":
@@ -101,7 +110,19 @@ def create_app(config: AgentConfig | None = None) -> FastAPI:
             return await tools.get_market_state(ticker)
         if tool_name == "get_opportunity":
             return await tools.get_opportunity(ticker)
+        if tool_name == "get_position":
+            return await tools.get_position(ticker)
         raise HTTPException(status_code=404, detail=f"Unknown tool {tool_name}")
+
+    @app.post("/agent/tools/{tool_name}")
+    async def run_controlled_tool(tool_name: str, payload: dict) -> dict:
+        if tool_name == "create_trade_proposal":
+            return await tools.create_trade_proposal(payload.get("strategy_id", ""))
+        if tool_name == "request_simulation":
+            return await tools.request_simulation(payload.get("proposal_id", ""))
+        if tool_name == "request_execution":
+            return await tools.request_execution(payload.get("proposal_id", ""))
+        raise HTTPException(status_code=404, detail=f"Unknown controlled tool {tool_name}")
 
     return app
 

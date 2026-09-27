@@ -292,6 +292,35 @@ Security boundaries added in Phase 6:
 - No fake success states exist anywhere: "executed" requires a real
   broadcast response, "confirmed" requires on-chain verification.
 
+## Agentic Wallet + Wallet Skills (Phase 7)
+
+- **AgenticWalletProvider** (apps/api/src/wallet/providers.ts) isolates the
+  Binance Agentic Wallet behind an interface. The documented integration is
+  the `binance-agentic-wallet` Skill driving the `baw` CLI (QR sign-in from
+  the Binance App; MPC keyless; App-configured limits enforced at API level).
+  The provider implements preflight detection and fails honestly with
+  NOT_CONFIGURED until the CLI is installed, signed in, and its command
+  surface confirmed. Nothing is simulated.
+- **WalletSkillsProvider**: only documented skills are exposed, and only the
+  OLYR allowlist is enabled (tokenized-securities-info, query-token-info,
+  query-address-info, binance-agentic-wallet). Write-capable skills stay
+  gated behind the execution policy. The LLM cannot alter the allowlist.
+- **AgentCapabilities**: computed deterministically — canExecuteTrades
+  defaults FALSE and requires wallet configured + policy enabled.
+- **ExecutionGate**: single authoritative gate (strategy ACTIVE, proposal
+  valid/unexpired, asset/action allowlists, risk APPROVED, quote fresh,
+  simulation PASSED, authorization valid, policy enabled, daily limits,
+  duplicate check, cooldown, human-approval threshold). Both the user path
+  and the bounded-agent path pass through it; any failure → BLOCKED with
+  deterministic reasons.
+- **Bounded agent loop** (StrategyLoopWorker): configurable interval, signal
+  deduplication, per-strategy cooldown, graceful stop. In MANUAL policy it
+  stops after creating the proposal (user executes from /proposals); in
+  BOUNDED_AGENT it continues only when every gate passes and the amount is
+  at or below OLYR_REQUIRE_HUMAN_APPROVAL_ABOVE_USD.
+- **b402**: PaymentProvider seam exists (services/agent) and is DISABLED by
+  design; payments never touch the trading path.
+
 ## Binance integration point (Phase 2, read-only)
 
 All Binance Web3 access is funneled through `packages/binance`

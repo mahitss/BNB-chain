@@ -79,6 +79,18 @@ export default function HomePage() {
         >
           Trade proposals →
         </a>
+        <a
+          href="/wallet"
+          className="inline-block w-fit rounded border border-zinc-700 px-4 py-2 font-mono text-sm text-zinc-200 transition-colors hover:border-amber-500/50 hover:text-amber-400"
+        >
+          Wallet →
+        </a>
+        <a
+          href="/agent"
+          className="inline-block w-fit rounded border border-zinc-700 px-4 py-2 font-mono text-sm text-zinc-200 transition-colors hover:border-amber-500/50 hover:text-amber-400"
+        >
+          Agent studio →
+        </a>
       </section>
 
       <section aria-labelledby="services-heading" className="flex flex-col gap-3">
