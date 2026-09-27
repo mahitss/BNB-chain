@@ -1,6 +1,6 @@
 {
   "name": "olyr",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "OLYR — autonomous tokenized-equity intelligence and execution on BNB Smart Chain.",
   "packageManager": "pnpm@11.9.0",

@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: "OLYR — Tokenized Equity Intelligence",
   description:
     "Autonomous intelligence and controlled execution for tokenized equities on BNB Smart Chain.",
+  applicationName: "OLYR",
 };
 
 export default function RootLayout({

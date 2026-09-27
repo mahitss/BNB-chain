@@ -2,123 +2,178 @@
 
 **Autonomous intelligence and controlled execution for tokenized equities on BNB Smart Chain.**
 
-OLYR monitors tokenized stocks (bStocks / Ondo-class assets), detects and explains price
-divergences against reference prices, validates every proposed action through a deterministic
-Rust risk engine, and — only when every gate passes — prepares bounded execution through the
-Binance Web3 stack. Tokenized markets keep operating outside traditional equity hours; OLYR
-keeps watching when the bell rings.
+[![CI](https://github.com/mahitss/BNB-chain/actions/workflows/ci.yml/badge.svg)](./.github/workflows/ci.yml)
 
-> **Status:** hackathon build, Phases 1–8 complete. No transaction has ever been broadcast
-> from this codebase; execution requires credentials, a funded wallet, and explicit
-> authorization, none of which exist in the repository.
+## Overview
 
-## What OLYR does
+OLYR watches tokenized stocks on BNB Smart Chain, detects and explains price
+divergences between their on-chain price and their reference price, validates
+every proposed action through a deterministic Rust risk engine, and executes
+only through an explicitly authorized, simulation-gated pipeline. It is built
+for one thesis: **tokenized equities trade around the clock, but most tooling
+still thinks in market hours** — OLYR brings structured intelligence and
+controlled automation to the hours in between.
 
-1. **Market intelligence** — real Binance Web3 RWA data (prices, market status, liquidity)
-   normalized into domain types; deterministic spread and freshness evaluation.
-2. **Opportunity engine** — explainable signals (OPPORTUNITY / WATCH / BLOCKED / NO_SIGNAL)
-   from configurable thresholds; every signal carries its reasons and warnings.
-3. **Strategy agent** — natural-language strategies parsed by an LLM into a strict schema,
-   then validated by four deterministic layers. The LLM stops at intent; it never calculates
-   risk or touches money.
-4. **Risk engine (Rust)** — 10 hard rules (trade size, daily exposure, slippage, asset/action
-   allowlists, freshness, liquidity, position limits, price/spread sanity) with per-rule
-   explanations. APPROVED / REJECTED / REQUIRES_REVIEW — deterministic, no LLM.
-5. **Controlled execution** — quote → transaction construction → simulation → authorization
-   policy (MANUAL / BOUNDED_AGENT / DISABLED) → broadcast → on-chain verification. Idempotent,
-   expiring, and fail-closed at every step.
-6. **Agentic Wallet integration (adapter)** — the Binance Agentic Wallet / Wallet Skills layer
-   is isolated behind a provider interface with preflight detection; OLYR never holds wallet
-   signing material.
+## Problem
+
+Tokenized equities (bStocks, Ondo-class assets) trade 24/7 on-chain, but:
+
+- their reference prices come from traditional markets that close;
+- divergence between on-chain and reference price is hard to measure reliably;
+- existing bots offer unrestricted execution with no structured risk controls;
+- AI agents have no safe way to turn intent into bounded on-chain actions.
+
+## Solution
+
+OLYR separates responsibilities by trust:
+
+1. **Detect** — real Binance Web3 RWA data, normalized and evaluated by a
+   deterministic opportunity engine (spread, freshness, liquidity, market state).
+2. **Interpret** — an LLM converts plain-English strategies into a strict
+   schema. It stops at intent: no keys, no tools, no execution.
+3. **Validate** — four deterministic validation layers (schema → semantic →
+   capability → safety) plus platform hard limits.
+4. **Authorize risk** — a Rust engine evaluates 10 independent rules and
+   returns APPROVED / REJECTED / REQUIRES_REVIEW with per-rule explanations.
+5. **Prepare** — a real quote from the Trading API, transaction construction,
+   and mandatory simulation through the Transaction API.
+6. **Gate** — a 12-point execution gate (expiry, allowlists, simulation,
+   authorization, policy, limits, cooldown, deduplication).
+7. **Execute** — a Go service signs (the only signer) and broadcasts;
+   broadcast ≠ confirmed: on-chain verification is a separate step.
+8. **Audit** — every stage persists structured, queryable events.
 
 ## Architecture
 
 ```
-Binance Web3 API (RWA · Market · Trading · Transaction · Wallet)
-      ↓  @olyr/binance (normalized clients, HMAC-signed)
-Market Intelligence (deterministic: state, freshness, spread)  →  Rust Risk Engine
-      ↓                                                              ↓
-Opportunity Engine ──→ Fastify API ──→ Strategy Registry (Prisma/Postgres)
-      ↓                                        ↑
-Next.js Terminal (Overview · Markets · Opportunities · Strategies · Agent ·
-Portfolio · Proposals · Executions · Wallet · Settings)
+User
+ ↓
+OLYR Terminal (Next.js)
+ ↓
+Fastify API
+ ├── Strategy Agent (Python, LLM behind an interface)
+ ├── Market/RWA Data (@olyr/binance clients)
+ ├── Opportunity Engine (deterministic)
+ ├── Portfolio
+ ├── Proposals
+ └── Execution Orchestrator
+       ↓
+   Rust Risk Engine ── APPROVED / REJECTED / REQUIRES_REVIEW
+       ↓
+   Transaction Simulation
+       ↓
+   Authorization (MANUAL | BOUNDED_AGENT | DISABLED)
+       ↓
+   Go Execution Service (sole signer)
+       ↓
+   BNB Smart Chain
+       ↓
+   Transaction Verification
+       ↓
+   Portfolio + Audit Trail (PostgreSQL)
 ```
 
-Full data flow, security boundaries, and phase-by-phase decisions:
-[docs/architecture/README.md](docs/architecture/README.md).
+Detailed diagrams: [docs/architecture/final-architecture.md](docs/architecture/final-architecture.md).
 
-## Tech stack
+## Core Flow
 
-- **Frontend:** Next.js 16, TypeScript, Tailwind CSS 4, TanStack Query
-- **API:** Node 24, Fastify, Prisma + PostgreSQL, Redis (optional cache/locks)
-- **Agent:** Python 3.12, FastAPI, provider-abstracted LLM (OpenAI-compatible)
-- **Execution:** Go (go-ethereum signing; EIP-1559 + EIP-712)
-- **Risk engine:** Rust (axum), 10 deterministic rules
-- **Blockchain:** BSC mainnet target, viem-compatible contracts deferred until needed
+`Strategy → Risk APPROVED → Quote → Simulation PASSED → Authorization →
+Broadcast → On-chain CONFIRMED → Portfolio + Audit` — with expiration,
+idempotency, and a kill switch enforced at every hop.
 
-## Local setup
+## Key Features
+
+- Real Binance Web3 RWA data (prices, official market status, liquidity pools)
+- Deterministic, explainable opportunity signals — no LLM in the numbers
+- Natural-language strategies with strict schema validation and clarification
+- Rust risk engine with 10 hard rules and platform limits the LLM cannot change
+- Quote → simulation → authorization → broadcast → verification pipeline
+- Kill switch, chain guard, idempotency, proposal expiry, immutable audit log
+- Read-only agent tools; a generic execute tool does not exist
+
+## Tech Stack
+
+Next.js 16 · TypeScript · Tailwind CSS 4 · TanStack Query · Fastify 5 ·
+Prisma + PostgreSQL · Redis (optional) · Python 3.12 + FastAPI ·
+Rust (axum) · Go + go-ethereum · BNB Smart Chain · Docker.
+Full inventory: [docs/tech-stack.md](docs/tech-stack.md).
+
+## Security Model
+
+The constitutional boundary — **the LLM is never the financial authority** —
+is enforced structurally. Full model: [docs/security.md](docs/security.md)
+and [docs/security-checklist.md](docs/security-checklist.md) (24 PASS / 2
+NEEDS_REVIEW / 0 FAIL at release).
+
+## Supported Integrations
+
+- **Binance Web3 API** — RWA Data, Market, Trading (RFQ + SWAP), Transaction,
+  Wallet (documented endpoints only)
+- **Binance Agentic Wallet / Wallet Skills** — isolated behind a provider
+  adapter with preflight detection (adapter fails closed until provisioned)
+- **LLM providers** — OpenAI-compatible chat completions; provider-abstracted
+
+## Local Development
 
 ```bash
 pnpm install
-pnpm build          # all TS packages + apps
-docker compose up -d postgres   # or: docker compose up -d for the full stack
+pnpm build
+docker compose up -d postgres
 cd apps/api && npx prisma migrate deploy
-pnpm dev            # web :3000 · api :4000
+pnpm dev   # web :3000 · api :4000
 ```
 
-Additional services (each independently bootable):
+## Environment Variables
 
-| Service     | Run                                            | Default |
-| ----------- | ---------------------------------------------- | ------- |
-| agent       | `cd services/agent && uvicorn app.main:app`    | :8000   |
-| risk-engine | `cd services/risk-engine && cargo run`         | :8002   |
-| execution   | `cd services/execution && go run ./cmd/server` | :8001   |
+Copy `.env.example` → `.env`. Server-side only: `BINANCE_API_KEY/SECRET`,
+`OLYR_LLM_API_KEY`, `OLYR_EXECUTOR_PRIVATE_KEY`, `DATABASE_URL`,
+`OLYR_INTERNAL_TOKEN`. Browser-visible: `NEXT_PUBLIC_OLYR_API_URL` only.
+Demo configuration: `.env.demo.example`.
 
-## Environment
+## Running the Project
 
-Copy `.env.example` → `.env` and fill what you need. Highlights:
+Each service is independently bootable (see the service table in the
+[deployment guide](docs/deployment.md)). `pnpm verify` runs the complete
+safe verification pipeline: format → lint → typecheck → tests → build →
+security audit. It never broadcasts a transaction.
 
-- `BINANCE_API_KEY` / `BINANCE_API_SECRET` — server-side only; without them OLYR runs in
-  dev mode and shows explicit setup states (never fake data).
-- `OLYR_LLM_PROVIDER` / `OLYR_LLM_MODEL` / `OLYR_LLM_API_KEY` — strategy parsing.
-- `OLYR_MAX_TRADE_USD`, `OLYR_MAX_DAILY_TRADE_USD`, `OLYR_MAX_POSITION_USD`,
-  `OLYR_MAX_SLIPPAGE_PERCENT`, `OLYR_REQUIRE_HUMAN_APPROVAL_ABOVE_USD` — hard risk limits.
-- `OLYR_EXECUTION_POLICY` — MANUAL (default) / BOUNDED_AGENT / DISABLED.
-- `OLYR_EXECUTOR_PRIVATE_KEY` — Go execution service only; never committed, never logged.
+## Testing
 
-Full list with defaults: [.env.example](.env.example).
+168 TypeScript tests (types, config, web logic, api), 45 Python tests
+(including adversarial prompt-injection), 19 Rust tests (rule matrix +
+invariants), Go state-machine/signing tests, integration smoke tests,
+`node scripts/security-audit.mjs`.
 
-## Verification
+## Demo
 
-```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build   # TS
-cd services/risk-engine && cargo fmt --check && cargo clippy -- -D warnings && cargo test
-cd services/agent && ruff check . && ruff format --check . && pytest tests -q
-cd services/execution && go vet ./... && go test ./...
-```
+Follow [docs/demo-runbook.md](docs/demo-runbook.md) and
+[docs/demo-script.md](docs/demo-script.md). The demo uses only real system
+states; where credentials are absent the product shows explicit setup states.
 
-CI (`.github/workflows/ci.yml`) runs the same gates on every push.
+## Mainnet Safety
 
-## Security model
+BSC mainnet execution requires: explicit `EXPECTED_CHAIN_ID`/`EXPECTED_NETWORK`
+match, kill switch off, MANUAL authorization, funded dedicated wallet, and the
+manual procedure in [docs/mainnet-micro-trade-runbook.md](docs/mainnet-micro-trade-runbook.md).
+Automated CI never broadcasts. **Live execution status: not verified** (no
+credentials in this build environment).
 
-- The LLM produces text only — no tools, keys, network, or execution capability.
-- Private keys live only in the Go execution service environment; Binance secrets only in the
-  Fastify environment; the browser sees neither.
-- Every execution passes: risk APPROVED → fresh quote → simulation PASSED → authorization →
-  policy gates → broadcast → on-chain verification. Broadcast ≠ confirmed.
-- Proposals expire; approvals cannot be reused; executions are idempotent.
-- Secrets are never logged or committed (`.env` is gitignored; only `.env.example` ships).
+## Project Structure
 
-## Deployment
+See [docs/architecture/phase-9-audit.md](docs/architecture/phase-9-audit.md)
+for the verified component inventory.
 
-Production build: `pnpm build` produces the Next.js production bundle and compiled services.
-Origins are configured via `NEXT_PUBLIC_OLYR_API_URL` (browser) and the service URL variables
-(`OLYR_AGENT_URL`, `OLYR_RISK_URL`, `OLYR_EXECUTION_URL`, `OLYR_UPSTREAM_URL`,
-`OLYR_INTERNAL_TOKEN` shared secret). Health endpoints: `/health` on every service plus
-`/api/system/status` and `/ready` on the API. Deployment is manual — no credentials or
-infrastructure are committed.
+## Limitations
 
-## Documentation
+Documented in [docs/submission/limitations.md](docs/submission/limitations.md)
+and [docs/final-audit.md](docs/final-audit.md).
 
-- [Architecture](docs/architecture/README.md) — boundaries, data flow, security model
-- [Developer report](docs/dev-report/README.md) — factual API integration log (submission artifact)
+## Developer Experience
+
+Factual integration log (Binance APIs, wallet, debugging):
+[docs/dev-report/README.md](docs/dev-report/README.md).
+
+## License
+
+Copyright © 2026 OLYR contributors. All rights reserved unless otherwise
+noted. Hackathon submission.

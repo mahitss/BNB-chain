@@ -43,9 +43,6 @@ export interface PriceSpread {
   spreadBps: string;
 }
 
-// TODO(phase-2+): risk-decision and execution-intent contracts will be added
-// here once the agent → risk-engine → execution flow is implemented.
-
 export * from "./rwa.js";
 export * from "./market.js";
 export { parseDecimal, formatDecimal, rescale, roundDiv } from "./decimal.js";
