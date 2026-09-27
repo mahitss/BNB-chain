@@ -266,6 +266,46 @@ To be filled during live verification; do not fabricate observations.
 - **Whether tested**: NOT TESTED — disabled by design in this phase.
 ```
 
+## Phase 8 template — terminal UX + integration observations
+
+To be filled during live verification; do not fabricate observations.
+
+```markdown
+## YYYY-MM-DD — Terminal UX integration
+
+### Onboarding friction
+
+<!-- e.g. credential setup steps, first-scan wait time. -->
+
+### Frontend integration issues
+
+<!-- contract mismatches, stale Next types, build quirks. -->
+
+### API latency
+
+<!-- measured p50/p95 for /api/rwa/assets, /api/opportunities, /api/system/status. -->
+
+### Real-time limitations
+
+<!-- polling intervals used; WebSocket/SSE not yet implemented. -->
+
+### Error messages
+
+<!-- upstream error surfaces shown to users; clarity findings. -->
+
+### Wallet UX
+
+<!-- connection states, empty portfolio handling. -->
+
+### Execution UX
+
+<!-- simulate → approve → execute flow findings. -->
+
+### Documentation gaps
+
+<!-- anything the docs should document but don't. -->
+```
+
 ## Log
 
 ## 2026-09-26 — Phase 2 preparation (documentation and client implementation)

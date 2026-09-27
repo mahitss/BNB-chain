@@ -185,6 +185,8 @@ export interface ExecutionRecord {
   txHash: string | null;
   failureReason: string | null;
   idempotencyKey: string;
+  /** LIVE | DRY_RUN | FIXTURE — never faked. */
+  environment: string | null;
   createdAt: string;
   updatedAt: string;
 }

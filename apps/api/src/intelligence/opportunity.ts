@@ -45,6 +45,7 @@ export function evaluateOpportunity(
   const timestamp = snapshot.timestamp;
 
   const base = {
+    id: `${snapshot.ticker}:${snapshot.tokenContractAddress}:${snapshot.timestamp}`,
     ticker: snapshot.ticker,
     tokenSymbol: snapshot.tokenSymbol,
     tokenContractAddress: snapshot.tokenContractAddress,

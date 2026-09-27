@@ -323,6 +323,7 @@ export class StrategyLoopWorker {
     snapshot: MarketSnapshot,
   ): MarketOpportunity {
     return {
+      id: `${snapshot.ticker}:${snapshot.tokenContractAddress}:${snapshot.timestamp}`,
       ticker: snapshot.ticker,
       tokenSymbol: snapshot.tokenSymbol,
       tokenContractAddress: snapshot.tokenContractAddress,

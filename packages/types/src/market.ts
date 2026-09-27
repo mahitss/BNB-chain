@@ -75,6 +75,8 @@ export type OpportunityConfidence = "HIGH" | "MEDIUM" | "LOW" | null;
 
 /** Explainable, structured opportunity result produced by the engine. */
 export interface MarketOpportunity {
+  /** Deterministic id: ticker + contract + evaluated-at instant. */
+  id: string;
   ticker: string;
   tokenSymbol: string;
   tokenContractAddress: string | null;

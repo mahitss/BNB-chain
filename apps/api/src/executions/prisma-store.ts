@@ -200,6 +200,7 @@ export class PrismaExecutionStore implements ExecutionStore {
       txHash: (row.txHash as string | null) ?? null,
       failureReason: (row.failureReason as string | null) ?? null,
       idempotencyKey: row.idempotencyKey as string,
+      environment: (row.environment as string | null) ?? null,
       createdAt: (row.createdAt as Date).toISOString(),
       updatedAt: (row.updatedAt as Date).toISOString(),
     };

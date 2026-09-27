@@ -44,6 +44,7 @@ import {
 } from "./strategies/agent-client.js";
 import { loadStrategyLimits } from "./strategies/limits.js";
 import { RegistryValidationError, StrategyRegistry } from "./strategies/registry.js";
+import { registerSystemStatusRoutes } from "./system/routes.js";
 import { HttpRiskEngineClient, type RiskEngineClient } from "./proposals/risk-client.js";
 import { PrismaProposalStore, type PrismaDelegate } from "./proposals/prisma-store.js";
 import { ProposalService } from "./proposals/service.js";
@@ -169,6 +170,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       ownerId: envOptionalString("OLYR_DEFAULT_OWNER") ?? "local-dev",
     });
   }
+  (app as unknown as { olyrPrisma?: unknown }).olyrPrisma = prisma;
+  registerSystemStatusRoutes(app, {
+    prismaReady: Boolean(options.prisma ?? prisma),
+    binanceConfigured: Boolean(binanceConfig),
+    riskUrl: envOptionalString("OLYR_RISK_URL") ?? "http://localhost:8002",
+    agentUrl: envOptionalString("OLYR_AGENT_URL") ?? "http://localhost:8000",
+    executionUrl: envOptionalString("OLYR_EXECUTION_URL") ?? "http://localhost:8101",
+    policyMode: (envOptionalString("OLYR_EXECUTION_POLICY") ?? "MANUAL").toUpperCase(),
+    scannerEnabled: intelligenceConfig.scan.enabled,
+  });
   const agentClient: AgentClient =
     options.agentClient ??
     new HttpAgentClient(envOptionalString("OLYR_AGENT_URL") ?? "http://localhost:8000");

@@ -43,6 +43,16 @@ export default function StrategiesPage() {
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<ParseResponse | null>(null);
+  const [mode, setMode] = useState<"NL" | "ADVANCED">("NL");
+  const [advanced, setAdvanced] = useState({
+    name: "",
+    ticker: "",
+    field: "spread_percent",
+    operator: "greater_than",
+    value: "1.5",
+    action: "ALERT",
+    maxUsd: "",
+  });
 
   const parseMutation = useMutation({
     mutationFn: () => post<ParseResponse>("/api/strategies/parse", { text }),
@@ -76,24 +86,197 @@ export default function StrategiesPage() {
         <h1 className="mt-2 text-3xl font-semibold text-zinc-50">Describe your strategy</h1>
       </header>
 
-      <textarea
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        rows={4}
-        placeholder={
-          '"Watch NVDA during US market closure and alert me if the token trades 1.5% above reference."'
-        }
-        className="mt-6 w-full rounded-lg border border-zinc-700 bg-zinc-900/60 p-4 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500/50 focus:outline-none"
-      />
-      <p className="mt-2 text-xs text-zinc-500">{EXAMPLE}</p>
-      <button
-        type="button"
-        disabled={text.trim().length === 0 || parseMutation.isPending}
-        onClick={() => parseMutation.mutate()}
-        className="mt-4 rounded border border-amber-500/50 bg-amber-500/10 px-4 py-2 font-mono text-sm text-amber-400 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {parseMutation.isPending ? "Parsing…" : "CREATE STRATEGY"}
-      </button>
+      <div role="group" aria-label="Builder mode" className="mt-4 flex gap-1">
+        {(["NL", "ADVANCED"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            aria-pressed={mode === m}
+            className={`rounded px-2.5 py-1.5 font-mono text-xs ${
+              mode === m ? "bg-zinc-800 text-amber-400" : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            {m === "NL" ? "NATURAL LANGUAGE" : "ADVANCED"}
+          </button>
+        ))}
+      </div>
+      {mode === "NL" && (
+        <textarea
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          rows={4}
+          placeholder={
+            '"Watch NVDA during US market closure and alert me if the token trades 1.5% above reference."'
+          }
+          className="mt-6 w-full rounded-lg border border-zinc-700 bg-zinc-900/60 p-4 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500/50 focus:outline-none"
+        />
+      )}
+      {mode === "ADVANCED" && (
+        <div className="mt-4 space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+          <div>
+            <label
+              htmlFor="adv-name"
+              className="font-mono text-xs uppercase tracking-widest text-zinc-500"
+            >
+              Name
+            </label>
+            <input
+              id="adv-name"
+              value={advanced.name}
+              onChange={(e) => setAdvanced({ ...advanced, name: e.target.value })}
+              className="mt-1 w-full rounded border border-zinc-700 bg-zinc-900/60 px-3 py-1.5 font-mono text-sm text-zinc-100"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="adv-ticker"
+                className="font-mono text-xs uppercase tracking-widest text-zinc-500"
+              >
+                Ticker
+              </label>
+              <input
+                id="adv-ticker"
+                value={advanced.ticker}
+                onChange={(e) => setAdvanced({ ...advanced, ticker: e.target.value.toUpperCase() })}
+                className="mt-1 w-full rounded border border-zinc-700 bg-zinc-900/60 px-3 py-1.5 font-mono text-sm text-zinc-100"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="adv-action"
+                className="font-mono text-xs uppercase tracking-widest text-zinc-500"
+              >
+                Action
+              </label>
+              <select
+                id="adv-action"
+                value={advanced.action}
+                onChange={(e) => setAdvanced({ ...advanced, action: e.target.value })}
+                className="mt-1 w-full rounded border border-zinc-700 bg-zinc-900/60 px-3 py-1.5 font-mono text-sm text-zinc-100"
+              >
+                {["OBSERVE", "ALERT", "PROPOSE_BUY", "PROPOSE_SELL", "PROPOSE_REDUCE_POSITION"].map(
+                  (a) => (
+                    <option key={a}>{a}</option>
+                  ),
+                )}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label
+                htmlFor="adv-field"
+                className="font-mono text-xs uppercase tracking-widest text-zinc-500"
+              >
+                Field
+              </label>
+              <select
+                id="adv-field"
+                value={advanced.field}
+                onChange={(e) => setAdvanced({ ...advanced, field: e.target.value })}
+                className="mt-1 w-full rounded border border-zinc-700 bg-zinc-900/60 px-3 py-1.5 font-mono text-sm text-zinc-100"
+              >
+                {[
+                  "market_state",
+                  "spread_percent",
+                  "reference_freshness",
+                  "on_chain_price",
+                  "reference_price",
+                  "liquidity_status",
+                ].map((f) => (
+                  <option key={f}>{f}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="adv-op"
+                className="font-mono text-xs uppercase tracking-widest text-zinc-500"
+              >
+                Operator
+              </label>
+              <select
+                id="adv-op"
+                value={advanced.operator}
+                onChange={(e) => setAdvanced({ ...advanced, operator: e.target.value })}
+                className="mt-1 w-full rounded border border-zinc-700 bg-zinc-900/60 px-3 py-1.5 font-mono text-sm text-zinc-100"
+              >
+                {[
+                  "equals",
+                  "not_equals",
+                  "greater_than",
+                  "greater_than_or_equal",
+                  "less_than",
+                  "less_than_or_equal",
+                ].map((o) => (
+                  <option key={o}>{o}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="adv-value"
+                className="font-mono text-xs uppercase tracking-widest text-zinc-500"
+              >
+                Value
+              </label>
+              <input
+                id="adv-value"
+                value={advanced.value}
+                onChange={(e) => setAdvanced({ ...advanced, value: e.target.value })}
+                className="mt-1 w-full rounded border border-zinc-700 bg-zinc-900/60 px-3 py-1.5 font-mono text-sm text-zinc-100"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-zinc-500">
+            Only supported fields/operators/actions are offered. PROPOSE_* actions require maxUsd;
+            every strategy is validated server-side regardless of this form.
+          </p>
+          <button
+            type="button"
+            disabled={!advanced.name || !advanced.ticker}
+            onClick={() => {
+              const isProposal = advanced.action.startsWith("PROPOSE");
+              setPreview({
+                status: "PARSED",
+                strategy: {
+                  name: advanced.name,
+                  asset: { ticker: advanced.ticker },
+                  conditions: [
+                    {
+                      field: advanced.field as never,
+                      operator: advanced.operator as never,
+                      value: Number.isNaN(Number(advanced.value))
+                        ? advanced.value
+                        : Number(advanced.value),
+                    },
+                  ],
+                  action: {
+                    type: advanced.action as never,
+                    ...(isProposal && advanced.maxUsd ? { maxUsd: Number(advanced.maxUsd) } : {}),
+                  },
+                },
+              });
+            }}
+            className="rounded border border-amber-500/50 bg-amber-500/10 px-4 py-1.5 font-mono text-xs text-amber-400 hover:bg-amber-500/20 disabled:opacity-40"
+          >
+            BUILD STRATEGY
+          </button>
+        </div>
+      )}
+      {mode === "NL" && <p className="mt-2 text-xs text-zinc-500">{EXAMPLE}</p>}
+      {mode === "NL" && (
+        <button
+          type="button"
+          disabled={text.trim().length === 0 || parseMutation.isPending}
+          onClick={() => parseMutation.mutate()}
+          className="mt-4 rounded border border-amber-500/50 bg-amber-500/10 px-4 py-2 font-mono text-sm text-amber-400 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {parseMutation.isPending ? "Parsing…" : "CREATE STRATEGY"}
+        </button>
+      )}
 
       {notConfigured && (
         <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/5 p-5 text-sm leading-relaxed text-amber-300">

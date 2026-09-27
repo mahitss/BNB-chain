@@ -6,6 +6,7 @@
  * results. There is deliberately NO execute button: OLYR cannot broadcast
  * transactions yet, and the UI says so.
  */
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiRequestError, get as apiGet } from "../../lib/api";
@@ -325,7 +326,15 @@ export default function ProposalsPage() {
       ) : (
         <div className="mt-8 grid gap-4">
           {proposals.map((proposal) => (
-            <ProposalCard key={proposal.id} proposal={proposal} />
+            <div key={proposal.id} className="relative">
+              <ProposalCard proposal={proposal} />
+              <Link
+                href={`/proposals/${encodeURIComponent(proposal.id)}`}
+                className="absolute right-4 top-4 font-mono text-xs text-amber-400 hover:underline"
+              >
+                VIEW DETAILS →
+              </Link>
+            </div>
           ))}
         </div>
       )}

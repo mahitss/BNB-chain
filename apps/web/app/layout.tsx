@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Providers from "./providers";
+import AppShell from "../components/shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OLYR",
-  description: "Autonomous tokenized-equity intelligence and execution on BNB Smart Chain.",
+  title: "OLYR — Tokenized Equity Intelligence",
+  description:
+    "Autonomous intelligence and controlled execution for tokenized equities on BNB Smart Chain.",
 };
 
 export default function RootLayout({
@@ -15,7 +17,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
       </body>
     </html>
   );

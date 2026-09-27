@@ -8,6 +8,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ApiRequestError, get as apiGet } from "../../lib/api";
 import type { MarketOpportunity, StrategyRecord } from "@olyr/types";
+import Timeline from "./timeline";
 
 interface AgentStatusResponse {
   loopEnabled: boolean;
@@ -154,6 +155,15 @@ export default function AgentPage() {
             No ACTIVE strategies. Activate one from the strategy builder.
           </p>
         )}
+      </section>
+
+      <section className="mt-8">
+        <h2 className="font-mono text-xs uppercase tracking-widest text-zinc-500">
+          Activity timeline
+        </h2>
+        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+          <Timeline />
+        </div>
       </section>
 
       <section className="mt-8">
