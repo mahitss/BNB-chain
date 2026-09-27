@@ -67,3 +67,13 @@ jobs:
         working-directory: services/risk-engine
       - run: cargo build
         working-directory: services/risk-engine
+
+  security:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/security-audit.mjs

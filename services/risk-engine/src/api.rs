@@ -18,6 +18,7 @@ pub fn build_router(config: RiskConfig) -> Router {
     let engine = std::sync::Arc::new(RiskEngine::new(config));
     Router::new()
         .route("/health", get(health))
+        .route("/readiness", get(readiness))
         .route(
             "/evaluate",
             post(move |Json(request): Json<RiskRequest>| async move {
@@ -31,6 +32,17 @@ pub fn build_router(config: RiskConfig) -> Router {
             }),
         )
         .with_state(())
+}
+
+/// Readiness = the full rule set is loaded (10 rules). Cheap, no I/O.
+async fn readiness() -> Json<serde_json::Value> {
+    let rule_count = crate::rules::all_rules().len();
+    Json(json!({
+        "service": "risk-engine",
+        "ready": rule_count >= 10,
+        "rules_loaded": rule_count,
+        "timestamp": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    }))
 }
 
 async fn health() -> Json<serde_json::Value> {

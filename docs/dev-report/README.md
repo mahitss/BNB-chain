@@ -306,6 +306,32 @@ To be filled during live verification; do not fabricate observations.
 <!-- anything the docs should document but don't. -->
 ```
 
+## Phase 9 template — hardening, security audit, mainnet readiness
+
+```markdown
+## YYYY-MM-DD — Production hardening
+
+### Security audit findings
+
+<!-- scanner output, manual review notes. -->
+
+### Kill switch / chain guard
+
+<!-- configuration behavior observed. -->
+
+### State machine audit
+
+<!-- illegal-transition findings. -->
+
+### Hardening changes
+
+<!-- helmet, rate limit, payload limit effects. -->
+
+### Remaining blockers
+
+<!-- live credentials, wallet provisioning. -->
+```
+
 ## Log
 
 ## 2026-09-26 — Phase 2 preparation (documentation and client implementation)

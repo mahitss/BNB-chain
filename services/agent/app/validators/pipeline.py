@@ -175,6 +175,18 @@ def validate_capability(strategy: StrategyDefinition, limits: StrategyLimits) ->
                 f"({', '.join(limits.allowed_assets)})",
             )
         )
+    if strategy.constraints is not None and strategy.constraints.max_slippage_percent is not None:
+        slippage = strategy.constraints.max_slippage_percent
+        if limits.max_slippage_percent > 0 and slippage > limits.max_slippage_percent:
+            errors.append(
+                AgentError(
+                    layer="capability",
+                    code="slippage-exceeds-platform-limit",
+                    message=f"maxSlippagePercent {slippage}% exceeds the platform limit "
+                    f"({limits.max_slippage_percent}%); unlimited or near-total "
+                    "slippage tolerance is not permitted.",
+                )
+            )
     for condition in strategy.conditions:
         if condition.field not in NUMERIC_FIELDS and condition.field not in ENUM_VALUES:
             errors.append(

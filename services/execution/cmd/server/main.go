@@ -40,15 +40,25 @@ const (
 )
 
 type server struct {
-	upstreamURL   string
-	internalToken string
-	privateKey    string // hex; may be empty → signing unavailable (fail closed)
-	rpcURL        string
-	httpClient    *http.Client
-	logger        *slog.Logger
+	upstreamURL     string
+	internalToken   string
+	privateKey      string // hex; may be empty → signing unavailable (fail closed)
+	rpcURL          string
+	httpClient      *http.Client
+	logger          *slog.Logger
+	expectedChainID string // fail-closed chain guard (Phase 9)
+	killSwitch      bool   // OLYR_KILL_SWITCH=enabled → no new execution starts
 
 	mu         sync.Mutex
 	byProposal map[string]string // proposalId → executionId (idempotency)
+}
+
+func matchesKillSwitch(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "enabled", "true", "1", "stop":
+		return true
+	}
+	return false
 }
 
 type executeRequest struct {
@@ -164,6 +174,12 @@ func (s *server) handleExecute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "executionId is required"})
 		return
 	}
+	if s.killSwitch {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "OLYR kill switch is ENABLED — no new execution may start",
+		})
+		return
+	}
 	if s.privateKey == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 			"error": "Executor private key is not configured (OLYR_EXECUTOR_PRIVATE_KEY); signing is unavailable and nothing will be broadcast",
@@ -223,6 +239,13 @@ func (s *server) runExecution(executionID string, bundle *execution.Bundle, prep
 }
 
 func (s *server) runSwap(ctx context.Context, executionID string, bundle *execution.Bundle, prep *execution.SwapPreparation) {
+	// Chain guard: the bundle's chain must match the EXPECTED_CHAIN_ID config
+	// exactly — never silently switch networks.
+	if bundle.ChainID != s.expectedChainID {
+		s.setState(ctx, executionID, execution.StateFailed,
+			fmt.Sprintf("chain guard: bundle chain %s does not match expected %s", bundle.ChainID, s.expectedChainID))
+		return
+	}
 	chainID := new(big.Int)
 	if _, ok := chainID.SetString(bundle.ChainID, 10); !ok {
 		s.setState(ctx, executionID, execution.StateFailed, "invalid chainId")
@@ -369,16 +392,36 @@ func envPort(key string, fallback int) int {
 func run() error {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	s := &server{
-		upstreamURL:   strings.TrimRight(envStr("OLYR_UPSTREAM_URL", "http://localhost:4000"), "/"),
-		internalToken: os.Getenv("OLYR_INTERNAL_TOKEN"),
-		privateKey:    os.Getenv("OLYR_EXECUTOR_PRIVATE_KEY"),
-		rpcURL:        envStr("OLYR_EXECUTOR_RPC_URL", "https://bsc-dataseed.bnbchain.org"),
-		httpClient:    &http.Client{Timeout: 30 * time.Second},
-		logger:        slog.Default(),
-		byProposal:    map[string]string{},
+		upstreamURL:     strings.TrimRight(envStr("OLYR_UPSTREAM_URL", "http://localhost:4000"), "/"),
+		internalToken:   os.Getenv("OLYR_INTERNAL_TOKEN"),
+		privateKey:      os.Getenv("OLYR_EXECUTOR_PRIVATE_KEY"),
+		rpcURL:          envStr("OLYR_EXECUTOR_RPC_URL", "https://bsc-dataseed.bnbchain.org"),
+		httpClient:      &http.Client{Timeout: 30 * time.Second},
+		logger:          slog.Default(),
+		byProposal:      map[string]string{},
+		expectedChainID: envStr("EXPECTED_CHAIN_ID", envStr("BINANCE_CHAIN_ID", "56")),
+		killSwitch:      matchesKillSwitch(os.Getenv("OLYR_KILL_SWITCH")),
+	}
+	if s.killSwitch {
+		slog.Warn("OLYR kill switch is ENABLED — no new execution may start")
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /readiness", func(w http.ResponseWriter, _ *http.Request) {
+		// Execution is only truly ready when signing is configured.
+		ready := s.privateKey != ""
+		status := map[string]any{
+			"service":  serviceName,
+			"version":  serviceVersion,
+			"signing":  map[bool]string{true: "configured", false: "not-configured"}[s.privateKey != ""],
+			"ready":    ready,
+		}
+		code := http.StatusOK
+		if !ready {
+			code = http.StatusServiceUnavailable
+		}
+		writeJSON(w, code, status)
+	})
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{
 			"service": serviceName, "status": "ok", "version": serviceVersion,

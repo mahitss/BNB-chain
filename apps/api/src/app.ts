@@ -9,6 +9,7 @@
  * market-intelligence endpoints return a structured 503 with setup
  * instructions — never fake data.
  */
+import { randomUUID as cryptoRandomUUID } from "node:crypto";
 import Fastify, {
   type FastifyError,
   type FastifyInstance,
@@ -16,6 +17,8 @@ import Fastify, {
   type FastifyRequest,
 } from "fastify";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
 import {
   BinanceError,
   BinanceNotConfiguredError,
@@ -50,6 +53,12 @@ import { PrismaProposalStore, type PrismaDelegate } from "./proposals/prisma-sto
 import { ProposalService } from "./proposals/service.js";
 import { RiskEngineUnavailableError } from "./proposals/risk-client.js";
 import {
+  ChainGuardError,
+  KillSwitchError,
+  assertExecutionPermitted,
+  loadSecurityConfig,
+} from "./security/hardening.js";
+import {
   registerExecutionRoutes,
   createExecutionStore,
   type ExecutionDeps,
@@ -80,11 +89,19 @@ export interface BuildAppOptions {
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: { level: loadEnvironment() === "development" ? "debug" : "info" },
+    bodyLimit: 256 * 1024, // 256 KB — no legitimate request is larger
+    genReqId: () => cryptoRandomUUID(),
   });
   // The web app calls this API cross-origin in local dev (different ports);
   // the API is the only Binance-capable upstream, so it must answer the
   // browser directly. Reflect the origin; never expose credentials here.
+  await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, { origin: true });
+  await app.register(rateLimit, {
+    max: 120,
+    timeWindow: "1 minute",
+    // Internal endpoints are token-guarded separately; still rate-limited.
+  });
   const environment = loadEnvironment();
   const appLogger: Logger = {
     debug: (m, meta) => app.log.debug(meta ?? {}, m),
@@ -198,6 +215,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   }
 
   const executionStore = prismaDelegate ? createExecutionStore(prismaDelegate) : null;
+  const securityConfig = loadSecurityConfig();
+  const guardExecution = (): void => {
+    assertExecutionPermitted(securityConfig);
+  };
+
   const executionDeps: ExecutionDeps = {
     tradingClient:
       options.tradingClient ??
@@ -221,6 +243,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     quoteTtlSeconds: envInt("OLYR_QUOTE_TTL_SECONDS", 30),
     internalToken: envOptionalString("OLYR_INTERNAL_TOKEN") ?? null,
     chainId,
+    guardExecution,
   };
   if (executionStore) {
     registerExecutionRoutes(app, executionDeps, executionStore);
@@ -815,11 +838,27 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   // Map typed errors to structured HTTP responses (never leak config values).
   app.setErrorHandler((error: FastifyError, _request: FastifyRequest, reply: FastifyReply) => {
+    if (error instanceof KillSwitchError) {
+      return reply
+        .code(503)
+        .send({ error: { category: "kill-switch-enabled", message: error.message } });
+    }
+    if (error instanceof ChainGuardError) {
+      return reply.code(403).send({ error: { category: "chain-guard", message: error.message } });
+    }
     if (typeof error.statusCode === "number") {
       const payload = (error as unknown as { payload?: unknown }).payload;
       return reply
         .code(error.statusCode)
         .send(payload ?? { error: { category: "invalid-request", message: error.message } });
+    }
+    if (error instanceof KillSwitchError) {
+      return reply
+        .code(503)
+        .send({ error: { category: "kill-switch-enabled", message: error.message } });
+    }
+    if (error instanceof ChainGuardError) {
+      return reply.code(403).send({ error: { category: "chain-guard", message: error.message } });
     }
     if (error instanceof BinanceNotConfiguredError) {
       return reply.code(503).send(notConfiguredResponse());

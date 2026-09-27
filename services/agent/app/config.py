@@ -55,6 +55,7 @@ class StrategyLimits:
     max_strategy_trade_usd: float
     max_strategy_daily_usd: float
     max_spread_threshold_percent: float
+    max_slippage_percent: float
     allowed_actions: list[str] = field(default_factory=list)  # empty = all supported
     allowed_assets: list[str] = field(default_factory=list)  # empty = any known ticker
 
@@ -86,6 +87,7 @@ def load_agent_config() -> AgentConfig:
             max_strategy_trade_usd=_env_float("OLYR_MAX_STRATEGY_TRADE_USD", 25),
             max_strategy_daily_usd=_env_float("OLYR_MAX_STRATEGY_DAILY_USD", 100),
             max_spread_threshold_percent=_env_float("OLYR_MAX_SPREAD_THRESHOLD", 10),
+            max_slippage_percent=_env_float("OLYR_MAX_SLIPPAGE_PERCENT", 1),
             allowed_actions=_env_list("OLYR_ALLOWED_ACTIONS"),
             allowed_assets=_env_list("OLYR_ALLOWED_ASSETS"),
         ),

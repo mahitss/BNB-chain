@@ -62,6 +62,10 @@ def create_app(config: AgentConfig | None = None) -> FastAPI:
             version=app.version,
         )
 
+    @app.get("/readiness")
+    def readiness_alias() -> dict:
+        return ready()
+
     @app.get("/agent/ready")
     def ready() -> dict:
         return {

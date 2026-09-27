@@ -26,6 +26,7 @@ export interface ExecutionDeps {
   quoteTtlSeconds: number;
   internalToken: string | null;
   chainId: string;
+  guardExecution: () => void;
 }
 
 interface StoredSimulation extends SimulationResult {
@@ -37,6 +38,7 @@ export function registerExecutionRoutes(
   deps: ExecutionDeps,
   store: ExecutionStore,
 ): void {
+  const guardExecution = deps.guardExecution;
   const quoteService = new QuoteService(store, deps.quoteTtlSeconds);
   const simulationGate = new SimulationGate(store);
   const authorizationService = new AuthorizationService(store, deps.policyMode, deps.ownerActor);
@@ -290,6 +292,7 @@ export function registerExecutionRoutes(
   app.post<{ Params: { id: string }; Body: { decision?: "APPROVE" | "REJECT" } }>(
     "/api/proposals/:id/authorize",
     async (request, reply) => {
+      guardExecution();
       const proposalId = request.params.id;
       const proposalRow = await app.inject({ method: "GET", url: `/api/proposals/${proposalId}` });
       if (proposalRow.statusCode !== 200) {
@@ -325,6 +328,7 @@ export function registerExecutionRoutes(
   // ---- Executions ---------------------------------------------------------
 
   app.post<{ Body: { proposalId?: string } }>("/api/executions", async (request, reply) => {
+    guardExecution();
     const proposalId = request.body?.proposalId;
     if (typeof proposalId !== "string") {
       return reply

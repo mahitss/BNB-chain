@@ -11,6 +11,7 @@ LIMITS = StrategyLimits(
     max_strategy_trade_usd=25,
     max_strategy_daily_usd=100,
     max_spread_threshold_percent=10,
+    max_slippage_percent=1,
     allowed_actions=[],
     allowed_assets=[],
 )
@@ -180,6 +181,7 @@ class TestValidationFailures:
             max_strategy_trade_usd=25,
             max_strategy_daily_usd=100,
             max_spread_threshold_percent=10,
+            max_slippage_percent=1,
             allowed_actions=[],
             allowed_assets=["TSLA", "SPY"],
         )
