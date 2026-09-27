@@ -217,23 +217,23 @@ export class HttpBinanceRwaClient implements BinanceRwaClient {
    * Signed request against the documented gateway. The envelope (HTTP 200 +
    * business `code`) decides success per the Market API error-code docs.
    */
-  private async request<T>(
+  protected async request<T>(
     operation: string,
     apiPath: string,
     params: Record<string, string | undefined>,
+    options: { method?: "GET" | "POST"; body?: string } = {},
   ): Promise<{ data: T; timestamp: number }> {
     const queryEntries = Object.entries(params).filter(
       (entry): entry is [string, string] => entry[1] !== undefined && entry[1] !== "",
     );
     const rawQuery = buildRawQuery(Object.fromEntries(queryEntries));
+    const method = options.method ?? "GET";
+    const body = options.body ?? "";
     // Signed requestPath includes the /build prefix exactly as sent on the wire.
     const requestPath = `${BINANCE_BUILD_PREFIX}${apiPath}${rawQuery ? `?${rawQuery}` : ""}`;
     const url = `${this.config.baseUrl}${apiPath}${rawQuery ? `?${rawQuery}` : ""}`;
     const timestamp = binanceTimestamp();
-    const signature = signRequest(
-      { timestamp, method: "GET", requestPath, body: "" },
-      this.config.apiSecret,
-    );
+    const signature = signRequest({ timestamp, method, requestPath, body }, this.config.apiSecret);
 
     const startedAt = Date.now();
     const logMeta = { operation, path: requestPath };
@@ -244,14 +244,14 @@ export class HttpBinanceRwaClient implements BinanceRwaClient {
     const attempt = async (): Promise<{ data: T; timestamp: number }> => {
       const result = await fetchWithTimeout(
         {
-          method: "GET",
+          method,
           url,
           headers: {
             "X-OC-APIKEY": this.config.apiKey,
             "X-OC-TIMESTAMP": timestamp,
             "X-OC-SIGN": signature,
           },
-          body: "",
+          body,
           timeoutMs: this.config.timeoutMs,
         },
         this.fetchImpl,

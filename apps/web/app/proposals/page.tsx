@@ -7,8 +7,16 @@
  * transactions yet, and the UI says so.
  */
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { ApiRequestError, get as apiGet } from "../../lib/api";
-import type { RiskDecision, TradeProposal } from "@olyr/types";
+import {
+  authorizeProposal,
+  createExecution,
+  estimateFromSimulation,
+  simulateProposal,
+  type SimulationResponse,
+} from "../../lib/execution-api";
+import type { ExecutionRecord, RiskDecision, TradeProposal } from "@olyr/types";
 
 interface ProposalsResponse {
   proposals: TradeProposal[];
@@ -103,15 +111,155 @@ function ProposalCard({ proposal }: { proposal: TradeProposal }) {
 
       <RiskChecks decision={proposal.riskDecision} />
 
+      <ExecutionFlow proposalId={proposal.id} status={proposal.status} />
+
+      {proposal.txHash && (
+        <p className="mt-3 font-mono text-xs text-zinc-400">
+          Transaction: <span className="text-zinc-200">{proposal.txHash}</span>
+        </p>
+      )}
+    </article>
+  );
+}
+
+/**
+ * Execution flow (Phase 6): SIMULATE → APPROVE & EXECUTE (explicit, MANUAL
+ * policy) → execution status. Success states are rendered ONLY from API
+ * responses — never fabricated. Without live Binance credentials the
+ * simulation step fails honestly, and the UI says so.
+ */
+function ExecutionFlow({ proposalId, status }: { proposalId: string; status: string }) {
+  const [simulation, setSimulation] = useState<SimulationResponse | null>(null);
+  const [execution, setExecution] = useState<ExecutionRecord | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const approved = status === "APPROVED";
+
+  const runSimulation = async () => {
+    setError(null);
+    setConfirming(true);
+    try {
+      setSimulation(await simulateProposal(proposalId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "simulation failed");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const approveAndExecute = async () => {
+    setError(null);
+    setConfirming(true);
+    try {
+      await authorizeProposal(proposalId, "APPROVE");
+      const record = await createExecution(proposalId);
+      setExecution(record);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "execution failed");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const reject = async () => {
+    setError(null);
+    try {
+      await authorizeProposal(proposalId, "REJECT");
+      setError("Proposal rejected by the user. No transaction was created.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "rejection failed");
+    }
+  };
+
+  if (!approved) {
+    return (
       <div className="mt-4 border-t border-zinc-800 pt-3">
         <span
           className="cursor-not-allowed rounded border border-zinc-700 px-3 py-1.5 font-mono text-xs text-zinc-500"
-          title="Trading arrives in a later phase"
+          title="Execution requires an APPROVED risk decision"
         >
           EXECUTION NOT ENABLED
         </span>
       </div>
-    </article>
+    );
+  }
+
+  const sim = simulation ? estimateFromSimulation(simulation) : null;
+
+  return (
+    <div className="mt-4 space-y-3 border-t border-zinc-800 pt-3">
+      {!simulation && (
+        <button
+          type="button"
+          onClick={runSimulation}
+          disabled={confirming}
+          className="rounded border border-amber-500/50 bg-amber-500/10 px-4 py-1.5 font-mono text-xs text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-40"
+        >
+          {confirming ? "SIMULATING…" : "SIMULATE TRADE"}
+        </button>
+      )}
+
+      {simulation && (
+        <div
+          className={`rounded border p-3 text-xs leading-relaxed ${
+            simulation.status === "PASSED"
+              ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
+              : simulation.status === "FAILED"
+                ? "border-red-500/30 bg-red-500/5 text-red-300"
+                : "border-amber-500/30 bg-amber-500/5 text-amber-300"
+          }`}
+        >
+          <p className="font-mono font-semibold">SIMULATION {simulation.status}</p>
+          {simulation.failReason && <p className="mt-1">Reason: {simulation.failReason}</p>}
+          {sim && (
+            <p className="mt-1 text-zinc-400">
+              Expected output: {sim.expectedOutput} · Fees: {sim.fees} · Slippage: {sim.slippage}
+            </p>
+          )}
+          <p className="mt-1 text-zinc-500">
+            Simulated at{" "}
+            {new Date(simulation.timestamp).toLocaleTimeString("en-US", { hour12: false })}
+          </p>
+        </div>
+      )}
+
+      {simulation?.status === "PASSED" && !execution && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={approveAndExecute}
+            disabled={confirming}
+            className="rounded border border-emerald-500/50 bg-emerald-500/10 px-4 py-1.5 font-mono text-xs text-emerald-400 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
+          >
+            {confirming ? "EXECUTING…" : "APPROVE & EXECUTE"}
+          </button>
+          <button
+            type="button"
+            onClick={reject}
+            disabled={confirming}
+            className="rounded border border-zinc-700 px-4 py-1.5 font-mono text-xs text-zinc-400 transition-colors hover:border-red-500/40 hover:text-red-400 disabled:opacity-40"
+          >
+            REJECT
+          </button>
+        </div>
+      )}
+
+      {execution && (
+        <div className="rounded border border-sky-500/30 bg-sky-500/5 p-3 text-xs leading-relaxed text-sky-300">
+          <p className="font-mono font-semibold">EXECUTION {execution.state}</p>
+          {execution.txHash && (
+            <p className="mt-1 font-mono break-all">Transaction: {execution.txHash}</p>
+          )}
+          {execution.state === "CONFIRMED" && <p className="mt-1">Portfolio updated.</p>}
+          {execution.failureReason && (
+            <p className="mt-1 text-red-300">Reason: {execution.failureReason}</p>
+          )}
+        </div>
+      )}
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
+    </div>
   );
 }
 

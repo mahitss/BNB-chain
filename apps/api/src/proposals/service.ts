@@ -164,6 +164,7 @@ export class ProposalService {
       expiresAt: expiresAt.toISOString(),
       createdAt: row.createdAt.toISOString(),
       riskDecision: null,
+      txHash: null,
     };
   }
 
@@ -317,6 +318,7 @@ export class ProposalService {
       expiresAt: (row.expiresAt as Date).toISOString(),
       createdAt: (row.createdAt as Date).toISOString(),
       riskDecision: latest,
+      txHash: (row.txHash as string | null) ?? null,
     };
   }
 

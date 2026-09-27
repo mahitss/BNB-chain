@@ -48,6 +48,12 @@ import { HttpRiskEngineClient, type RiskEngineClient } from "./proposals/risk-cl
 import { PrismaProposalStore, type PrismaDelegate } from "./proposals/prisma-store.js";
 import { ProposalService } from "./proposals/service.js";
 import { RiskEngineUnavailableError } from "./proposals/risk-client.js";
+import {
+  registerExecutionRoutes,
+  createExecutionStore,
+  type ExecutionDeps,
+} from "./executions/routes.js";
+import type { BinanceTradingClient } from "@olyr/binance";
 
 export const API_VERSION = "0.3.0";
 
@@ -63,6 +69,8 @@ export interface BuildAppOptions {
   prisma?: import("./strategies/registry.js").PrismaClientLike;
   /** Test seam: inject the risk-engine client instead of HTTP transport. */
   riskClient?: RiskEngineClient;
+  /** Test seam: inject the Binance trading client instead of HTTP transport. */
+  tradingClient?: BinanceTradingClient;
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
@@ -173,6 +181,35 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         new HttpRiskEngineClient(envOptionalString("OLYR_RISK_URL") ?? "http://localhost:8002"),
       envInt("OLYR_PROPOSAL_TTL_SECONDS", 300),
     );
+  }
+
+  const executionStore = prismaDelegate ? createExecutionStore(prismaDelegate) : null;
+  const executionDeps: ExecutionDeps = {
+    tradingClient:
+      options.tradingClient ??
+      (binanceConfig
+        ? new (await import("@olyr/binance")).HttpBinanceTradingClient({
+            config: {
+              apiKey: binanceConfig.apiKey,
+              apiSecret: binanceConfig.apiSecret,
+              baseUrl: binanceConfig.baseUrl,
+              timeoutMs: binanceConfig.timeoutMs,
+              retry: binanceConfig.retry,
+            },
+            logger: appLogger,
+          })
+        : (null as unknown as BinanceTradingClient)),
+    policyMode: (
+      envOptionalString("OLYR_EXECUTION_POLICY") ?? "MANUAL"
+    ).toUpperCase() as ExecutionDeps["policyMode"],
+    ownerActor: envOptionalString("OLYR_DEFAULT_OWNER") ?? "local-dev",
+    executorAddress: envOptionalString("OLYR_EXECUTOR_ADDRESS") ?? null,
+    quoteTtlSeconds: envInt("OLYR_QUOTE_TTL_SECONDS", 30),
+    internalToken: envOptionalString("OLYR_INTERNAL_TOKEN") ?? null,
+    chainId,
+  };
+  if (executionStore) {
+    registerExecutionRoutes(app, executionDeps, executionStore);
   }
 
   const requireProposals = (): ProposalService => {

@@ -81,6 +81,8 @@ export interface TradeProposal {
   createdAt: string;
   /** Latest risk decision, when one exists. */
   riskDecision: RiskDecision | null;
+  /** Set once a real broadcast succeeded (Phase 6); never fabricated. */
+  txHash: string | null;
 }
 
 /** Human-readable risk explanation generated from structured rule results. */

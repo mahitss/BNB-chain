@@ -257,6 +257,41 @@ Security boundaries added in Phase 5:
   EXPIRED and is never executable. Re-evaluation creates NEW evaluation
   records — historical results are never mutated.
 
+## Trading Quotes, Simulation + Controlled Execution (Phase 6)
+
+```
+Approved Proposal (risk APPROVED)
+      ↓
+Quote (Binance Trading API /aggregator/quote — RFQ for equity tokens)
+      ↓
+Swap Preparation (/aggregator/swap → unsigned tx OR EIP-712 RFQ payload)
+      ↓
+Simulation (/pre-transaction/simulate — SWAP mode)   [RFQ: vendor-validated]
+      ↓
+Authorization (policy: MANUAL | BOUNDED_AGENT | DISABLED; default MANUAL)
+      ↓
+Go Execution Service — the ONLY signer (EIP-1559 / EIP-712)
+      ↓  (signed artifact returns via token-guarded internal API)
+Broadcast (/pre-transaction/broadcast-transaction) or RFQ /order/submit
+      ↓
+Verification (/aggregator/history — BROADCAST ≠ CONFIRMED)
+```
+
+Security boundaries added in Phase 6:
+
+- Private keys exist ONLY in the Go execution service environment; never in
+  the browser, the API, logs, or fixtures.
+- The browser communicates only with Fastify; only the token-guarded internal
+  API is reachable by the Go service.
+- The LLM cannot construct, sign, or request transactions — it stops at
+  strategy intent (Phase 4).
+- Simulation-before-broadcast is enforced by gates: no broadcast without
+  risk APPROVED + fresh quote + simulation PASSED (SWAP) + authorization.
+- Idempotency: one execution per proposal; repeated requests return the
+  existing execution instead of re-submitting.
+- No fake success states exist anywhere: "executed" requires a real
+  broadcast response, "confirmed" requires on-chain verification.
+
 ## Binance integration point (Phase 2, read-only)
 
 All Binance Web3 access is funneled through `packages/binance`

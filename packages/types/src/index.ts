@@ -51,3 +51,4 @@ export * from "./market.js";
 export { parseDecimal, formatDecimal, rescale, roundDiv } from "./decimal.js";
 export * from "./strategy.js";
 export * from "./proposal.js";
+export * from "./execution.js";

@@ -52,3 +52,6 @@ export { silentLogger, redactCredentials } from "./logger.js";
 export type { Logger } from "./logger.js";
 export { DEFAULT_RETRY_CONFIG } from "./http.js";
 export type { RetryConfig, Sleep } from "./http.js";
+export { HttpBinanceTradingClient } from "./trading-client.js";
+export type { BinanceTradingClient } from "./trading-client.js";
+export type { QuoteParams, SwapParams, TokenBalance } from "./trading-client.js";

@@ -58,6 +58,10 @@ model TradeProposal {
   expiresAt                DateTime
   createdAt                DateTime @default(now())
   evaluations              RiskEvaluation[]
+  quotes                   TradeQuote[]
+  simulations              Simulation[]
+  authorizations           ExecutionAuthorization[]
+  executions               Execution[]
 
   @@index([strategyId, createdAt])
 }
@@ -88,3 +92,68 @@ model RiskRuleResult {
   reason       String?
   warning      String?
 }
+
+model TradeQuote {
+  id                  String   @id @default(cuid())
+  proposalId          String
+  proposal            TradeProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  chainId             String
+  fromTokenAddress    String
+  toTokenAddress      String
+  amountIn            String
+  estimatedAmountOut  String?
+  routes              Json
+  tradeFeeUsd         String?
+  priceImpactPercent  String?
+  expiresAt           DateTime
+  createdAt           DateTime @default(now())
+
+  @@index([proposalId, createdAt])
+}
+
+model Simulation {
+  id            String   @id @default(cuid())
+  proposalId    String
+  proposal      TradeProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  quoteId       String?
+  status        String
+  apiStatus     String?
+  failReason    String?
+  result        Json
+  swapPreparation Json?
+  createdAt     DateTime @default(now())
+
+  @@index([proposalId, createdAt])
+}
+
+model ExecutionAuthorization {
+  id           String   @id @default(cuid())
+  proposalId   String
+  proposal     TradeProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  quoteId      String?
+  simulationId String?
+  decision     String
+  actor        String
+  policyMode   String
+  createdAt    DateTime @default(now())
+
+  @@index([proposalId, createdAt])
+}
+
+model Execution {
+  id              String   @id @default(cuid())
+  proposalId      String
+  proposal        TradeProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  quoteId         String?
+  simulationId    String?
+  authorizationId String?
+  state           String   @default("CREATED")
+  orderId         String?
+  txHash          String?
+  failureReason   String?
+  idempotencyKey  String   @unique
+  environment     String   @default("DRY_RUN")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+

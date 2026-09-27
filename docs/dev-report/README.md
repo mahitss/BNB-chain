@@ -193,6 +193,36 @@ To be filled during live verification; do not fabricate observations.
 - **Edge cases discovered**: [TO BE RECORDED]
 ```
 
+## Phase 6 template — Trading API, simulation, controlled execution
+
+To be filled during live verification; do not fabricate observations.
+
+```markdown
+## YYYY-MM-DD — Live trading/simulation verification
+
+### Trading API
+
+- **Quote experience**: [TO BE RECORDED] — RFQ vs SWAP route behavior, vendor spread.
+- **Routing behavior**: [TO BE RECORDED]
+- **Slippage**: [TO BE RECORDED] — auto vs manual slippage behavior.
+- **Latency**: [TO BE RECORDED] — quote + swap-construction p50/p95.
+- **Errors**: [TO BE RECORDED] — QUOTE_EXPIRED and friends, real triggers.
+
+### Transaction API
+
+- **Simulation experience**: [TO BE RECORDED] — evmTx payload behavior.
+- **Simulation errors**: [TO BE RECORDED]
+- **Response structure**: [TO BE RECORDED] — balanceChanges/allowanceChanges in practice.
+- **Broadcasting behavior**: [TO BE RECORDED] — orderId/txHash semantics.
+
+### Execution
+
+- **Approval flow**: [TO BE RECORDED] — approve-transaction flow for RWA tokens.
+- **Wallet behavior**: [TO BE RECORDED] — nonce, balance verification.
+- **Transaction confirmation**: [TO BE RECORDED] — aggregator/history latency.
+- **Edge cases**: [TO BE RECORDED]
+```
+
 ## Log
 
 ## 2026-09-26 — Phase 2 preparation (documentation and client implementation)
