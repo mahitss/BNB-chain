@@ -119,7 +119,14 @@ describe("market intelligence endpoints (fixture data via injected client)", () 
       assert.equal(body.ticker, "NVDA");
       assert.equal(body.onChainPrice, "101.820000");
       assert.equal(body.referencePrice, "100.000000");
-      assert.equal(body.marketState, "WEEKEND"); // statusInfo closed + Saturday calendar
+      // statusInfo is closed; the calendar refines CLOSED into WEEKEND or
+      // HOLIDAY when the current NYSE date is a weekend/holiday, otherwise
+      // CLOSED. Compute the expectation instead of depending on wall-clock.
+      const { getUsEquityCalendarState } =
+        await import("../src/intelligence/us-equity-calendar.js");
+      const cal = getUsEquityCalendarState(new Date());
+      const expected = cal === "WEEKEND" || cal === "HOLIDAY" ? cal : "CLOSED";
+      assert.equal(body.marketState, expected);
       assert.equal(body.liquidity.status, "AVAILABLE");
       assert.ok(body.divergence.spreadPercent.startsWith("1.8"));
       assert.equal(body.source, "binance-web3");
@@ -137,7 +144,12 @@ describe("market intelligence endpoints (fixture data via injected client)", () 
       assert.equal(response.statusCode, 200);
       const body = JSON.parse(response.body);
       assert.equal(body.ticker, "NVDA");
-      assert.equal(body.marketState, "WEEKEND");
+      // statusInfo is closed; refinement depends on the current NYSE calendar.
+      const { getUsEquityCalendarState } =
+        await import("../src/intelligence/us-equity-calendar.js");
+      const cal = getUsEquityCalendarState(new Date());
+      const expectedState = cal === "WEEKEND" || cal === "HOLIDAY" ? cal : "CLOSED";
+      assert.equal(body.marketState, expectedState);
       assert.equal(body.marketStateSource, "binance");
       assert.ok("timestamp" in body);
       assert.ok("dataSource" in body);

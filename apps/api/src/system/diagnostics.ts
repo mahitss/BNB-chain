@@ -5,7 +5,7 @@
  * them, and exposes a single source of truth for agent state.
  */
 import type { FastifyInstance } from "fastify";
-import { isBinanceConfigured, envOptionalString } from "@olyr/config";
+import { envOptionalString } from "@olyr/config";
 import { loadBinanceConfig } from "@olyr/config";
 import type { BinanceTradingClient } from "@olyr/binance";
 
@@ -43,7 +43,7 @@ export function registerDiagnosticsRoutes(
    * AUTHENTICATION_FAILED (40101/40102/40103/40104) and other errors without
    * logging or returning credential values.
    */
-  app.get("/api/diagnostics/binance/probe", async (_request, reply) => {
+  app.get("/api/diagnostics/binance/probe", async (_request) => {
     if (!deps.binanceConfigured || !deps.tradingClient) {
       return {
         result: "NOT_CONFIGURED",
@@ -54,7 +54,11 @@ export function registerDiagnosticsRoutes(
       const config = loadBinanceConfig();
       if (config) {
         // One cheap, read-only platform list call.
-        await deps.tradingClient.getAllTokenBalances("56", envOptionalString("OLYR_EXECUTOR_ADDRESS") ?? "0x0000000000000000000000000000000000000000");
+        await deps.tradingClient.getAllTokenBalances(
+          "56",
+          envOptionalString("OLYR_EXECUTOR_ADDRESS") ??
+            "0x0000000000000000000000000000000000000000",
+        );
       }
       return { result: "OK", detail: "Binance accepted the request." };
     } catch (error) {
@@ -72,7 +76,6 @@ export function registerDiagnosticsRoutes(
           : message.slice(0, 200),
       };
     }
-    void reply;
   });
 
   /** Single source of truth for agent state (UI must derive from this). */
@@ -84,7 +87,8 @@ export function registerDiagnosticsRoutes(
       detail = "Scanner disabled (OLYR_SCAN_ENABLED=false).";
     } else if (!deps.binanceConfigured) {
       state = "STANDBY";
-      detail = "Scan enabled but Binance credentials are not configured — the loop cannot evaluate market data.";
+      detail =
+        "Scan enabled but Binance credentials are not configured — the loop cannot evaluate market data.";
     } else {
       state = "SCANNING";
       detail = deps.lastScanAt

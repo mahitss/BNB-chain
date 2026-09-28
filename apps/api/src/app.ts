@@ -198,15 +198,6 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     policyMode: (envOptionalString("OLYR_EXECUTION_POLICY") ?? "MANUAL").toUpperCase(),
     scannerEnabled: intelligenceConfig.scan.enabled,
   });
-  // Diagnostics: safe credential presence check + agent state source of truth.
-  // tradingClient is not yet built at this point; we pass null and let the
-  // probe route handle it (it checks binanceConfigured first).
-  registerDiagnosticsRoutes(app, {
-    scanEnabled: intelligenceConfig.scan.enabled,
-    binanceConfigured: Boolean(binanceConfig),
-    lastScanAt: null, // updated by the scanner store at runtime via /api/agent/state
-    tradingClient: null,
-  });
   const agentClient: AgentClient =
     options.agentClient ??
     new HttpAgentClient(envOptionalString("OLYR_AGENT_URL") ?? "http://localhost:8000");
@@ -255,6 +246,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     chainId,
     guardExecution,
   };
+
+  // Diagnostics (Phase 10.1): safe credential-presence check + agent state
+  // source of truth. Registered after the trading client exists so the live
+  // probe can distinguish NOT_CONFIGURED from AUTHENTICATION_FAILED.
+  registerDiagnosticsRoutes(app, {
+    scanEnabled: intelligenceConfig.scan.enabled,
+    binanceConfigured: Boolean(binanceConfig),
+    lastScanAt: store.lastScanOutcome().at,
+    tradingClient: executionDeps.tradingClient,
+  });
   if (executionStore) {
     registerExecutionRoutes(app, executionDeps, executionStore);
   }

@@ -22,7 +22,6 @@ function loadRootEnv(): void {
 }
 loadRootEnv();
 
-
 export type Environment = "development" | "test" | "production";
 
 const ENVIRONMENTS = ["development", "test", "production"] as const;

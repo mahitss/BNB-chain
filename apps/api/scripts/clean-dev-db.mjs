@@ -60,7 +60,9 @@ async function main() {
     // Keep the newest (first, already sorted desc). Delete the rest.
     const [keep, ...dupes] = rows;
     console.log(`\nDuplicate: "${key}"`);
-    console.log(`  Keep  : id=${keep.id} createdAt=${keep.createdAt.toISOString()} status=${keep.status}`);
+    console.log(
+      `  Keep  : id=${keep.id} createdAt=${keep.createdAt.toISOString()} status=${keep.status}`,
+    );
     for (const dupe of dupes) {
       // Never delete a strategy that has linked executions.
       const hasExecutions = await prisma.execution.count({
