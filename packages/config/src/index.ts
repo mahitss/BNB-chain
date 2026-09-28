@@ -1,10 +1,26 @@
 /**
  * Environment-driven configuration helpers shared by OLYR TypeScript services.
  *
- * All configuration comes from environment variables. Missing required values
- * throw at startup instead of failing silently later. Secrets never get
- * defaults — only explicitly optional values do.
+ * Loads the repository-root .env (if present) so local runs work without
+ * shell-exported variables. Real environment variables always win.
  */
+import { config as loadDotenv } from "dotenv";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Walk up from this module to find the repo root containing pnpm-workspace.yaml.
+function loadRootEnv(): void {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 6; i++) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) {
+      loadDotenv({ path: join(dir, ".env"), quiet: true });
+      return;
+    }
+    dir = dirname(dir);
+  }
+}
+loadRootEnv();
 
 export type Environment = "development" | "test" | "production";
 
