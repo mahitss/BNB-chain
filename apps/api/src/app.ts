@@ -48,6 +48,7 @@ import {
 import { loadStrategyLimits } from "./strategies/limits.js";
 import { RegistryValidationError, StrategyRegistry } from "./strategies/registry.js";
 import { registerSystemStatusRoutes } from "./system/routes.js";
+import { registerDiagnosticsRoutes } from "./system/diagnostics.js";
 import { HttpRiskEngineClient, type RiskEngineClient } from "./proposals/risk-client.js";
 import { PrismaProposalStore, type PrismaDelegate } from "./proposals/prisma-store.js";
 import { ProposalService } from "./proposals/service.js";
@@ -196,6 +197,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     executionUrl: envOptionalString("OLYR_EXECUTION_URL") ?? "http://localhost:8101",
     policyMode: (envOptionalString("OLYR_EXECUTION_POLICY") ?? "MANUAL").toUpperCase(),
     scannerEnabled: intelligenceConfig.scan.enabled,
+  });
+  // Diagnostics: safe credential presence check + agent state source of truth.
+  // tradingClient is not yet built at this point; we pass null and let the
+  // probe route handle it (it checks binanceConfigured first).
+  registerDiagnosticsRoutes(app, {
+    scanEnabled: intelligenceConfig.scan.enabled,
+    binanceConfigured: Boolean(binanceConfig),
+    lastScanAt: null, // updated by the scanner store at runtime via /api/agent/state
+    tradingClient: null,
   });
   const agentClient: AgentClient =
     options.agentClient ??
@@ -748,7 +758,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   /** Global banner: US equities calendar state + on-chain observability. */
   app.get("/api/market/state", async () => {
-    return requireMarketService().getGlobalState();
+    if (!marketService) {
+      // Binance not configured: US equities can still be derived from the
+      // calendar; on-chain market is explicitly NOT_CONFIGURED (not UNKNOWN).
+      const { getUsEquityCalendarState } = await import("./intelligence/us-equity-calendar.js");
+      return {
+        usEquities: getUsEquityCalendarState(new Date()),
+        usEquitiesSource: "olyr-us-equity-calendar (NYSE rules, America/New_York)",
+        onChainMarket: "NOT_CONFIGURED" as const,
+        onChainMarketDetail:
+          "Binance Web3 API credentials are not configured. Set BINANCE_API_KEY and BINANCE_API_SECRET to enable on-chain market data.",
+        timestamp: new Date().toISOString(),
+      };
+    }
+    return marketService.getGlobalState();
   });
 
   app.get<{ Params: { ticker: string } }>(
@@ -791,6 +814,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   /** Latest scanner results (empty until the first scan completes). */
   app.get("/api/opportunities", async () => {
+    if (!marketService) {
+      // Binance not configured: the scanner never ran. Return explicit
+      // NOT_CONFIGURED so the UI can distinguish "configured + no signals"
+      // from "not configured + scanner never evaluated anything".
+      return {
+        timestamp: new Date().toISOString(),
+        dataSource: "none",
+        lastScanAt: null,
+        opportunities: [],
+        configurationStatus: "NOT_CONFIGURED" as const,
+        configurationDetail:
+          "Binance Web3 API credentials are not configured. The scanner cannot evaluate divergence signals without market data.",
+      };
+    }
     requireMarketService();
     const latest = store.latest();
     return {
@@ -798,6 +835,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       dataSource: "binance-web3",
       lastScanAt: latest.completedAt,
       opportunities: latest.opportunities,
+      configurationStatus: "CONFIGURED" as const,
     };
   });
 

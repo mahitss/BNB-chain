@@ -22,6 +22,8 @@ const GROUPS = ["OPPORTUNITY", "WATCH", "BLOCKED", "DATA_UNAVAILABLE"] as const;
 interface OpportunitiesResponse {
   opportunities: MarketOpportunity[];
   lastScanAt: string | null;
+  configurationStatus?: "CONFIGURED" | "NOT_CONFIGURED";
+  configurationDetail?: string;
 }
 
 export default function OpportunitiesPage() {
@@ -76,10 +78,20 @@ export default function OpportunitiesPage() {
 
       {all.length === 0 ? (
         <div className="mt-6">
-          <EmptyState
-            title="No opportunities detected."
-            detail="Either no scan has completed or every evaluated asset is within thresholds."
-          />
+          {query.data.configurationStatus === "NOT_CONFIGURED" ? (
+            <EmptyState
+              title="Market data unavailable"
+              detail={
+                query.data.configurationDetail ??
+                "Configure BINANCE_API_KEY and BINANCE_API_SECRET in the API environment to enable the scanner."
+              }
+            />
+          ) : (
+            <EmptyState
+              title="No opportunities detected."
+              detail="The scanner completed its last run and every evaluated asset is within configured thresholds."
+            />
+          )}
         </div>
       ) : (
         GROUPS.map((group) => {
