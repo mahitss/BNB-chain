@@ -213,6 +213,9 @@ function fakeTradingClient() {
 }
 
 async function buildExecutionApp(ttl = 30) {
+  // Hermetic: the developer .env may set Binance keys via dotenv — tests must not hit the network.
+  delete process.env["BINANCE_API_KEY"];
+  delete process.env["BINANCE_API_SECRET"];
   process.env["OLYR_SCAN_ENABLED"] = "false";
   process.env["OLYR_DEFAULT_OWNER"] = "test-owner";
   process.env["OLYR_QUOTE_TTL_SECONDS"] = String(ttl);

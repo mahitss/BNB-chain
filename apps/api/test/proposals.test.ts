@@ -149,6 +149,9 @@ const APPROVED: Partial<RiskDecision> = {
 };
 
 async function buildProposalApp(riskDecision: Partial<RiskDecision>, ttl?: number) {
+  // Hermetic: the developer .env may set Binance keys via dotenv — tests must not hit the network.
+  delete process.env["BINANCE_API_KEY"];
+  delete process.env["BINANCE_API_SECRET"];
   process.env["OLYR_SCAN_ENABLED"] = "false";
   process.env["OLYR_DEFAULT_OWNER"] = "test-owner";
   if (ttl !== undefined) {

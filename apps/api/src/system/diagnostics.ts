@@ -1,13 +1,24 @@
 /**
- * Safe diagnostics (Phase 10.1): reports ONLY whether Binance credentials are
- * CONFIGURED / NOT_CONFIGURED — never values. Distinguishes missing
- * credentials from invalid ones (AUTHENTICATION_FAILED) without conflating
- * them, and exposes a single source of truth for agent state.
+ * Safe diagnostics (Phase 9/10.2): reports ONLY whether Binance credentials
+ * are CONFIGURED / NOT_CONFIGURED — never values. The live probe categorizes
+ * failures as AUTHENTICATION_FAILED / NETWORK_ERROR / RATE_LIMITED /
+ * UPSTREAM_ERROR / INVALID_RESPONSE — never conflating a missing credential
+ * with an invalid one. Also exposes the single source of truth for agent
+ * state.
  */
 import type { FastifyInstance } from "fastify";
 import { envOptionalString } from "@olyr/config";
-import { loadBinanceConfig } from "@olyr/config";
 import type { BinanceTradingClient } from "@olyr/binance";
+import { BinanceError } from "@olyr/binance";
+
+export type BinanceDiagnosticResult =
+  | "OK"
+  | "NOT_CONFIGURED"
+  | "AUTHENTICATION_FAILED"
+  | "NETWORK_ERROR"
+  | "RATE_LIMITED"
+  | "UPSTREAM_ERROR"
+  | "INVALID_RESPONSE";
 
 export interface AgentStateInfo {
   state: "DISABLED" | "STANDBY" | "SCANNING" | "ERROR";
@@ -16,6 +27,43 @@ export interface AgentStateInfo {
   scanEnabled: boolean;
   binanceConfigured: boolean;
   lastScanAt: string | null;
+}
+
+/** Maps a caught error to a safe diagnostic category (no values leaked). */
+export function categorizeProbeError(error: unknown): {
+  result: BinanceDiagnosticResult;
+  detail: string;
+} {
+  if (error instanceof BinanceError) {
+    switch (error.category) {
+      case "authentication":
+        return {
+          result: "AUTHENTICATION_FAILED",
+          detail: "Binance rejected the configured credentials (authentication failed).",
+        };
+      case "rate-limit":
+        return { result: "RATE_LIMITED", detail: "Binance rate limit exceeded on the probe call." };
+      case "network":
+      case "timeout":
+        return {
+          result: "NETWORK_ERROR",
+          detail: "Binance gateway unreachable (network/timeout).",
+        };
+      case "malformed-response":
+        return {
+          result: "INVALID_RESPONSE",
+          detail: "Binance returned a response that could not be parsed.",
+        };
+      case "invalid-request":
+        return {
+          result: "UPSTREAM_ERROR",
+          detail: "Binance rejected the probe request parameters.",
+        };
+      default:
+        return { result: "UPSTREAM_ERROR", detail: error.message.slice(0, 200) };
+    }
+  }
+  return { result: "NETWORK_ERROR", detail: "Probe failed before reaching Binance." };
 }
 
 export function registerDiagnosticsRoutes(
@@ -39,42 +87,30 @@ export function registerDiagnosticsRoutes(
   });
 
   /**
-   * Read-only live probe: distinguishes NOT_CONFIGURED from
-   * AUTHENTICATION_FAILED (40101/40102/40103/40104) and other errors without
-   * logging or returning credential values.
+   * Read-only live probe: makes one real signed request to the Binance
+   * gateway and categorizes the outcome. Distinguishes NOT_CONFIGURED (no
+   * request made) from AUTHENTICATION_FAILED / NETWORK_ERROR / RATE_LIMITED /
+   * UPSTREAM_ERROR / INVALID_RESPONSE. Never returns credential values.
    */
-  app.get("/api/diagnostics/binance/probe", async (_request) => {
+  app.get("/api/diagnostics/binance/probe", async () => {
     if (!deps.binanceConfigured || !deps.tradingClient) {
       return {
-        result: "NOT_CONFIGURED",
+        result: "NOT_CONFIGURED" as BinanceDiagnosticResult,
         detail: "Credentials are absent; no request was made to Binance.",
       };
     }
     try {
-      const config = loadBinanceConfig();
-      if (config) {
-        // One cheap, read-only platform list call.
-        await deps.tradingClient.getAllTokenBalances(
-          "56",
-          envOptionalString("OLYR_EXECUTOR_ADDRESS") ??
-            "0x0000000000000000000000000000000000000000",
-        );
-      }
-      return { result: "OK", detail: "Binance accepted the request." };
-    } catch (error) {
-      const name = error instanceof Error ? error.name : "";
-      const message = error instanceof Error ? error.message : String(error);
-      const authFailure =
-        name === "BinanceAuthError" ||
-        /\b(40101|40102|40103|40104)\b/.test(message) ||
-        message.includes("Invalid API Key") ||
-        message.includes("Signature error");
+      await deps.tradingClient.getAllTokenBalances(
+        "56",
+        envOptionalString("OLYR_EXECUTOR_ADDRESS") ?? "0x0000000000000000000000000000000000000000",
+      );
       return {
-        result: authFailure ? "AUTHENTICATION_FAILED" : "ERROR",
-        detail: authFailure
-          ? "Binance rejected the configured credentials (authentication failed)."
-          : message.slice(0, 200),
+        result: "OK" as BinanceDiagnosticResult,
+        detail: "Binance accepted the signed request.",
       };
+    } catch (error) {
+      const { result, detail } = categorizeProbeError(error);
+      return { result, detail };
     }
   });
 

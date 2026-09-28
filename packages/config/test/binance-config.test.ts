@@ -2,7 +2,7 @@
  * Binance configuration validation tests.
  */
 import { strict as assert } from "node:assert";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { EnvError } from "../src/index.js";
 import { isBinanceConfigured, loadBinanceConfig } from "../src/binance.js";
 
@@ -12,6 +12,14 @@ const KEYS = [
   "BINANCE_BASE_URL",
   "BINANCE_TIMEOUT_MS",
 ] as const;
+
+// The developer's root .env is loaded by dotenv at module import; tests must
+// be hermetic against it — clear the keys before every test.
+beforeEach(() => {
+  for (const key of KEYS) {
+    delete process.env[key];
+  }
+});
 
 afterEach(() => {
   for (const key of KEYS) {
