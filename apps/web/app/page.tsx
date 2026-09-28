@@ -31,6 +31,8 @@ interface GlobalState {
 interface OpportunitiesResponse {
   opportunities: MarketOpportunity[];
   lastScanAt: string | null;
+  configurationStatus?: "CONFIGURED" | "NOT_CONFIGURED";
+  configurationDetail?: string;
 }
 
 interface AgentStatus {
@@ -130,7 +132,13 @@ export default function OverviewPage() {
           <Stat
             label="On-chain market"
             value={gs?.onChainMarket ?? "UNKNOWN"}
-            tone={gs?.onChainMarket === "ACTIVE" ? "pass" : "warn"}
+            tone={
+              gs?.onChainMarket === "ACTIVE"
+                ? "pass"
+                : gs?.onChainMarket === "NOT_CONFIGURED"
+                  ? "fail"
+                  : "warn"
+            }
             hint={gs?.onChainMarketDetail}
           />
         </Card>
@@ -187,10 +195,17 @@ export default function OverviewPage() {
           />
           <div className="p-4">
             {notable.length === 0 ? (
-              <EmptyState
-                title="No divergence signals"
-                detail="All evaluated assets are within configured thresholds, or the scanner has not completed a scan."
-              />
+              opportunities.data?.configurationStatus === "NOT_CONFIGURED" ? (
+                <EmptyState
+                  title="Market data unavailable"
+                  detail="Configure the Binance Web3 data source (BINANCE_API_KEY and BINANCE_API_SECRET) to evaluate divergence signals. The scanner has not run."
+                />
+              ) : (
+                <EmptyState
+                  title="No divergence signals"
+                  detail="All evaluated assets are within configured thresholds, or the scanner has not completed a scan."
+                />
+              )
             ) : (
               <ul className="space-y-2">
                 {notable.slice(0, 5).map((o) => (

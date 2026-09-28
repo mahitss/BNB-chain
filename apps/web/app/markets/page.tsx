@@ -77,9 +77,12 @@ export default function MarketsPage() {
         ) : assetsQuery.isError ? (
           <ErrorState
             message={
-              assetsQuery.error instanceof Error
-                ? assetsQuery.error.message
-                : "Market data unavailable."
+              assetsQuery.error instanceof Error &&
+              assetsQuery.error.message.includes("not configured")
+                ? "Binance Web3 API credentials are not configured (BINANCE_API_KEY / BINANCE_API_SECRET). Set them in the API environment and restart to load tokenized market data."
+                : assetsQuery.error instanceof Error
+                  ? assetsQuery.error.message
+                  : "Market data unavailable."
             }
             onRetry={() => void assetsQuery.refetch()}
           />

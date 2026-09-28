@@ -20,10 +20,23 @@ interface AgentStatusResponse {
   timestamp: string;
 }
 
+interface AgentStateResponse {
+  state: "DISABLED" | "STANDBY" | "SCANNING" | "ERROR";
+  detail: string;
+  scanEnabled: boolean;
+  binanceConfigured: boolean;
+  lastScanAt: string | null;
+}
+
 export default function AgentPage() {
   const statusQuery = useQuery({
     queryKey: ["agent-status"],
     queryFn: () => apiGet<AgentStatusResponse>("/api/agent/status"),
+    refetchInterval: 30_000,
+  });
+  const stateQuery = useQuery({
+    queryKey: ["agent-state"],
+    queryFn: () => apiGet<AgentStateResponse>("/api/agent/state"),
     refetchInterval: 30_000,
   });
   const strategiesQuery = useQuery({
@@ -82,7 +95,7 @@ export default function AgentPage() {
         <p className="font-mono text-xs text-zinc-500">
           {status.loopEnabled
             ? `Monitoring ${status.activeStrategies} strategies · ${status.totalStrategies} total`
-            : "Bounded agent loop is disabled (scan enabled required)"}
+            : (stateQuery.data?.detail ?? "Bounded agent loop is disabled.")}
         </p>
       </header>
 
