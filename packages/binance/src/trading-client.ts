@@ -237,6 +237,7 @@ export class HttpBinanceTradingClient extends HttpBinanceRwaClient implements Bi
     return {
       id: `sim_${timestamp}`,
       proposalId: null,
+      quoteId: null,
       status,
       apiStatus,
       failReason: data.failReason ?? null,
