@@ -173,11 +173,13 @@ export interface ExecutionGates {
   riskDecision: RiskDecision | null;
   quote: { id: string; quote: TradeQuote } | null;
   simulation: { id: string; simulation: SimulationResult } | null;
-  authorization?: { id: string; decision: string } | null;
+  authorization?: { id: string; decision: string; quoteId?: string | null } | null;
   now?: Date;
 }
 
 export interface GateCheck {
+  /** Stable rule name for audit trails and UI rendering. */
+  check: string;
   passed: boolean;
   reason: string;
 }
@@ -189,18 +191,22 @@ export function evaluateGates(gates: ExecutionGates): GateCheck[] {
   const expired = (iso: string | undefined) => iso !== undefined && Date.parse(iso) < now.getTime();
 
   checks.push({
+    check: "RISK_APPROVED",
     passed: gates.proposal.status === "APPROVED",
     reason: `Risk decision must be APPROVED (current: ${gates.proposal.status})`,
   });
   checks.push({
+    check: "PROPOSAL_NOT_EXPIRED",
     passed: !expired(gates.proposal.expiresAt),
     reason: "Proposal has expired; re-evaluate risk first",
   });
   checks.push({
+    check: "QUOTE_VALID",
     passed: Boolean(gates.quote) && !expired(gates.quote?.quote.expiresAt),
     reason: "Quote is missing or expired; fetch a fresh quote",
   });
   checks.push({
+    check: "SIMULATION_PASSED",
     passed:
       Boolean(gates.simulation) &&
       (gates.simulation?.simulation.status === "PASSED" ||
@@ -211,8 +217,34 @@ export function evaluateGates(gates: ExecutionGates): GateCheck[] {
         : "Simulation has not been performed",
   });
   checks.push({
+    check: "AUTHORIZATION_VALID",
     passed: gates.authorization?.decision === "APPROVED",
     reason: "No APPROVED authorization for this proposal",
+  });
+  // Authorization scope binding (Phase 10.3): an authorization granted for an
+  // earlier quote is not reusable for the current one.
+  const authQuoteId = gates.authorization?.quoteId;
+  const authStale =
+    authQuoteId !== undefined &&
+    authQuoteId !== null &&
+    gates.quote !== null &&
+    authQuoteId !== gates.quote.id;
+  checks.push({
+    check: "AUTHORIZATION_QUOTE_BINDING",
+    passed: !authStale,
+    reason: "Authorization was granted for a different quote; re-authorization required",
+  });
+  // Simulation must belong to the current quote — a new quote invalidates it.
+  const simQuoteId = gates.simulation?.simulation?.quoteId ?? undefined;
+  const simStale =
+    simQuoteId !== undefined &&
+    simQuoteId !== null &&
+    gates.quote !== null &&
+    simQuoteId !== gates.quote.id;
+  checks.push({
+    check: "SIMULATION_QUOTE_BINDING",
+    passed: !simStale,
+    reason: "Simulation was performed for a different quote; re-simulate",
   });
   return checks;
 }

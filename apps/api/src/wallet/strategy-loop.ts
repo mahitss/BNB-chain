@@ -276,6 +276,7 @@ export class StrategyLoopWorker {
       simulation = {
         id: `rfq_${Date.now()}`,
         proposalId: proposal.id,
+        quoteId: null,
         status: "UNKNOWN",
         apiStatus: "RFQ",
         failReason: null,

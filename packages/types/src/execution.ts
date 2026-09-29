@@ -90,6 +90,8 @@ export type SimulationStatus = "PASSED" | "FAILED" | "UNKNOWN";
 export interface SimulationResult {
   id: string;
   proposalId: string | null;
+  /** Quote this simulation was performed for — binding check at the gate. */
+  quoteId: string | null;
   status: SimulationStatus;
   /** Simulated execution status exactly as reported by the API. */
   apiStatus: string | null;

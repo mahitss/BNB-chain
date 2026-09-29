@@ -233,6 +233,7 @@ export function registerExecutionRoutes(
         simulation = {
           id: `rfq_${Date.now()}`,
           proposalId,
+          quoteId: existingQuote.id,
           status: "UNKNOWN",
           apiStatus: "RFQ",
           failReason: null,
