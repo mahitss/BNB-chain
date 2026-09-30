@@ -1,44 +1,36 @@
-# OLYR — Submission
+# OLYR — Hackathon Submission
 
 **Autonomous intelligence and controlled execution for tokenized equities on
 BNB Smart Chain.**
 
-## What OLYR does
-
-OLYR monitors tokenized stocks on BNB Smart Chain, detects and explains
-divergences between their on-chain price and their reference price, validates
-every proposed action through a deterministic Rust risk engine, and executes
-only through an explicitly authorized, simulation-gated pipeline.
-
-## Why it matters
-
-Tokenized equities trade around the clock. OLYR brings structured
-intelligence, honest explainability, and hard safety controls to that market —
-the AI proposes, deterministic rules decide, humans authorize.
-
-## The safety story (the differentiator)
-
-- The LLM stops at intent: no keys, no tools, no network, no execution.
-- A 10-rule Rust risk engine is the only execution authority.
-- Simulation is mandatory before broadcast; broadcast ≠ confirmed.
-- Kill switch, chain guard, expiry, idempotency, cooldowns, and platform
-  limits are enforced in code — the AI cannot change them.
-- Every stage persists an immutable audit event.
+Start here: [judge-guide.md](judge-guide.md) — understand OLYR in 2 minutes.
 
 ## Submission contents
 
-| Document                                     | Purpose                                     |
-| -------------------------------------------- | ------------------------------------------- |
-| [demo-script.md](demo-script.md)             | Timed 3–4 minute demo narration             |
-| [screenshots.md](screenshots.md)             | Required screenshot set + rules             |
-| [architecture.md](architecture.md)           | Final architecture with security boundaries |
-| [security.md](security.md)                   | Security architecture summary               |
-| [tech-stack.md](tech-stack.md)               | Actual technologies used                    |
-| [limitations.md](limitations.md)             | Known limitations (factual)                 |
-| [release-readiness.md](release-readiness.md) | READY / NEEDS REVIEW / BLOCKED matrix       |
+| Document                                                         | Purpose                                           |
+| ---------------------------------------------------------------- | ------------------------------------------------- |
+| [judge-guide.md](judge-guide.md)                                 | 2-minute judge walkthrough                        |
+| [product-positioning.md](product-positioning.md)                 | One-liner, positioning language, what OLYR is not |
+| [demo-script.md](demo-script.md)                                 | Timed 3–4 minute demo narration                   |
+| [demo-recording-checklist.md](demo-recording-checklist.md)       | Pre-recording checks                              |
+| [pitch-deck.md](pitch-deck.md)                                   | 8-slide structure                                 |
+| [one-pager.md](one-pager.md)                                     | Concise project summary                           |
+| [architecture.md](architecture.md)                               | Final architecture (Mermaid) + trust boundaries   |
+| [security-story.md](security-story.md)                           | "Why can't the AI drain the wallet?"              |
+| [technical-novelty.md](technical-novelty.md)                     | Engineering decisions, mapped to code             |
+| [developer-experience-report.md](developer-experience-report.md) | Factual Binance/stack integration log             |
+| [test-report.md](test-report.md)                                 | Verification results at freeze                    |
+| [limitations.md](limitations.md)                                 | Honest limitations                                |
+| [release-readiness.md](release-readiness.md)                     | READY / NEEDS REVIEW / BLOCKED matrix             |
+| [release-notes.md](release-notes.md)                             | v1.0.0 capabilities                               |
+| [screenshots.md](screenshots.md)                                 | Screenshot set + rules                            |
 
-## Running it
+## Canonical demo path
 
-See the repository README (`Local Development`) and
-[docs/demo-runbook.md](../demo-runbook.md). `pnpm verify` runs the complete
-safe verification pipeline.
+Overview → Markets → Asset → Opportunity → Strategy → Agent → Proposal →
+Risk → Quote → Simulation → Authorization → (Broadcast is manual only) →
+Portfolio.
+
+Everything in this package describes the actual implementation. Where a
+capability requires external provisioning (Binance credentials, funded
+wallet, LLM key), the documents say so explicitly.

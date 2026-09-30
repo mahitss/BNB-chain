@@ -1,27 +1,101 @@
-# OLYR Demo Script (3–4 minutes)
+# OLYR Demo Script (Final — 3–4 minutes)
 
-A timed narration path matching `docs/demo-runbook.md`. Every screen is real
-system state; where credentials are absent, the honest setup state is itself
-the talking point.
+Timed narration matching the canonical flow. Every screen shows real backend
+state; where credentials are absent, the honest setup state is the talking
+point.
 
-| Time  | Screen              | Say / do                                                                                                                                                                                                                                                                       |
-| ----- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 00:00 | Terminal (`/`)      | "Tokenized stocks trade on-chain around the clock — but the tools to understand them still think in market hours. This is OLYR." Point at the market status tiles and the live status bar.                                                                                     |
-| 00:20 | `/` continued       | "Everything on screen is real backend state: Binance Web3 data on the left, service health along the bottom — the status bar shows degraded services, it never hides them."                                                                                                    |
-| 00:45 | `/markets`          | "Live tokenized stocks from the Binance Web3 Market API — reference price, on-chain price, official market status per asset." Search for an asset to show the table reacts.                                                                                                    |
-| 01:10 | `/markets/[ticker]` | "The key comparison: on-chain price vs reference price. OLYR computes the spread deterministically and reports reference freshness straight from the API." Note the market state badge — official, not inferred.                                                               |
-| 01:35 | `/strategies`       | "You describe what you want in plain English." Type the example, hit ANALYZE, show the structured interpretation. "The LLM only structures intent — every number was already validated." If no LLM key: show the setup banner and build the strategy in ADVANCED mode instead. |
-| 02:00 | `/opportunities`    | "The opportunity engine classifies divergence signals: WATCH, OPPORTUNITY, BLOCKED — each with its reasons and warnings." Open one: "Why this was detected" / "What prevents execution" — structured rule results.                                                             |
-| 02:20 | Proposals + risk    | Create a proposal from the saved strategy and run risk evaluation. Without Binance credentials the Rust engine rejects on missing price — "it refuses to trade on data it doesn't have." With credentials: APPROVED with every rule listed.                                    |
-| 02:40 | Quote + simulation  | "A real Binance quote, then mandatory transaction simulation before anything can broadcast. Simulation FAILED means the trade would revert — it never reaches broadcast."                                                                                                      |
-| 03:00 | `/wallet`           | "The authorization boundary. MANUAL mode requires a human for every trade. The AI never holds keys and can never change its own limits — $25 per trade, $100 per day, kill switch."                                                                                            |
-| 03:20 | `/executions`       | "Every execution persists its full state timeline. Broadcast is not confirmed — confirmation comes from on-chain verification. Explorer link only for real hashes."                                                                                                            |
-| 03:40 | Portfolio + close   | "Portfolio and audit trail update from verified state. OLYR: autonomous intelligence, controlled execution — the AI proposes, deterministic rules decide."                                                                                                                     |
+## 0:00–0:20 — THE PROBLEM
 
-## Honesty notes
+**Screen: Overview (`/`)**
 
-- If Binance credentials are absent: markets show the setup state; the risk
-  engine's REJECTED-on-missing-price is the safety showcase.
-- If the LLM key is absent: the strategy builder shows its setup banner.
-- Never narrate a trade as executed/confirmed unless the screen shows it from
-  the API.
+> "Tokenized stocks trade on-chain around the clock — but the moment the
+> traditional market closes, most tooling goes blind. And every 'AI trading'
+> demo out there hands the model a wallet and hopes for the best."
+
+## 0:20–0:45 — OLYR OVERVIEW
+
+**Screen: Overview tiles + status bar**
+
+> "OLYR watches tokenized equities on BNB Smart Chain. This status bar is
+> live — every service, real health checks. The US-equities state comes from
+> our NYSE calendar engine. And this agent is bounded: it can watch and
+> propose, but it can never move funds by itself."
+
+## 0:45–1:15 — LIVE TOKENIZED MARKET
+
+**Screen: `/markets`**
+
+> "Here's the live tokenized market from the Binance Web3 Market API —
+> reference price, on-chain price, official market status per asset. Search
+> works." _(search for an asset)_ "Each number comes straight from the API —
+> when something is unavailable, OLYR says unavailable."
+
+## 1:15–1:40 — DIVERGENCE / OPPORTUNITY
+
+**Screen: `/opportunities` → detail**
+
+> "OLYR computes the spread deterministically — big-number arithmetic, no
+> floats in the money path. Each signal is grouped: WATCH, OPPORTUNITY,
+> BLOCKED. Open one: 'Why this was detected' and 'What prevents execution'
+> are the actual rule outputs — not marketing."
+
+## 1:40–2:10 — NATURAL LANGUAGE STRATEGY
+
+**Screen: `/strategies`**
+
+> "You describe what you want: 'Watch NVDA when the US market is closed and
+> alert me when the divergence exceeds 1.5%.' The LLM structures that intent
+> into a strict schema — then stops. Four validation layers check it, and
+> the platform's own limits override anything the model says."
+
+## 2:10–2:35 — AGENT EVALUATION
+
+**Screen: `/agent`**
+
+> "The bounded agent loop evaluates active strategies on an interval. Every
+> event in this timeline is persisted from real backend state — strategy
+> matched, proposal created, risk decision. No chain-of-thought, no
+> fabricated activity."
+
+## 2:35–3:00 — RISK ENGINE
+
+**Screen: `/proposals` → detail (risk section)**
+
+> "Every proposal goes to a Rust risk engine with ten hard rules: trade
+> size, daily exposure, slippage, allowlists, freshness, liquidity, position
+> limits. It's deterministic — same inputs, same decision — and it explains
+> itself rule by rule. The AI can't override it."
+
+## 3:00–3:20 — QUOTE + SIMULATION
+
+**Screen: proposal detail (quote/simulation)**
+
+> "Approved proposals get a real Binance quote, then the transaction is
+> constructed and simulated on the actual API before anything can proceed.
+> A simulation failure stops the trade here."
+
+## 3:20–3:40 — AUTHORIZATION / WALLET
+
+**Screen: `/wallet`**
+
+> "Execution requires explicit human authorization. MANUAL mode means every
+> single trade is approved by a person. The wallet page shows the
+> capability checklist — and the AI's execution capability is false by
+> default. The kill switch blocks everything system-wide."
+
+## 3:40–4:00 — EXECUTION / VERIFICATION / CLOSING
+
+**Screen: `/executions`**
+
+> "When everything passes, the Go service signs, broadcasts, and verifies
+> on-chain — broadcast and confirmed are different states, and OLYR shows
+> both honestly. Every stage is audited. That's OLYR: autonomous
+> intelligence, controlled execution — the AI proposes, deterministic rules
+> decide."
+
+## Recording notes
+
+- With valid Binance credentials, markets/opportunities show live data and
+  the full flow runs to AWAITING AUTHORIZATION.
+- Without credentials, show the setup states deliberately: "the product
+  refuses to fake data" is a stronger demo point than a fake table.

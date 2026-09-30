@@ -1,35 +1,33 @@
-# OLYR Release Readiness (v1.0.0)
+# OLYR Release Readiness (v1.0.0 — Submission Freeze)
 
-Verified 2026-09-27 against the repository at tag v1.0.0. Evidence points to
-in-repo files, tests, or live verification runs.
+Verified 2026-09-30. Statuses: READY / NEEDS REVIEW / BLOCKED only.
 
-| Category           | Status                             | Evidence                                                                                                                                                                                                            |
-| ------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Core Product       | READY                              | All 10 terminal pages + 3 detail views render real backend state; overview/market/opportunity/strategy/proposal/execution/wallet flows verified live (honest states without credentials). `apps/web`, `pnpm build`. |
-| Market Data        | READY*                             | 6 documented RWA endpoints integrated, normalized, cached; live Binance verification pending credentials (`/ready?probe=1`). *Data path fully implemented; live call unverified.                                    |
-| Opportunity Engine | READY                              | Deterministic signals with reasons/warnings; 40 TS tests + invariant-style coverage; boundary tests at thresholds.                                                                                                  |
-| Strategy Agent     | READY                              | 45 pytest incl. adversarial injection matrix; 4-layer validation; clarification flow; fails safe on malformed output.                                                                                               |
-| Risk Engine        | READY                              | Rust clippy -D warnings; 19 tests incl. invariants (over-limit never approved); deterministic; no LLM/I-O.                                                                                                          |
-| Trading            | READY (code) / NEEDS REVIEW (live) | Quote + swap construction implemented per documented API; live gateway call unverified (no credentials).                                                                                                            |
-| Simulation         | READY (code) / NEEDS REVIEW (live) | Mandatory SWAP-mode gate; RFQ vendor-validated; simulation REQUIRED before broadcast (tested).                                                                                                                      |
-| Wallet             | NEEDS REVIEW                       | Adapter fails closed NOT_CONFIGURED; baw CLI SKILL.md unreachable from build environment; provisioning requires Binance App + QR sign-in.                                                                           |
-| Execution          | READY (code) / NEEDS REVIEW (live) | Go state machine, idempotency, kill switch, chain guard, go-ethereum signing; broadcast path unverified live.                                                                                                       |
-| Portfolio          | NEEDS REVIEW                       | Honest 503 states until wallet provisioning; balances endpoint implemented against documented Wallet API.                                                                                                           |
-| Security           | READY                              | Security checklist 24 PASS / 2 NEEDS_REVIEW / 0 FAIL; scanner zero findings; adversarial tests green; kill switch + chain guard tested.                                                                             |
-| Observability      | READY                              | Structured JSON logs with request ids; /health + /readiness per service; /api/system/status aggregation; audit events persisted. Metrics export not yet present.                                                    |
-| Frontend           | READY                              | Next 16 production build clean; responsive shell + status bar; 13 logic tests; hydration-safe client pages.                                                                                                         |
-| Backend            | READY                              | Fastify hardening (helmet, rate-limit, body limit); Prisma migrations current; graceful shutdown all services.                                                                                                      |
-| Deployment         | READY                              | docs/deployment.md documents order/env/health; Dockerfiles production-shaped; no credentials committed; manual deploy only.                                                                                         |
-| Documentation      | READY                              | README final; architecture (Mermaid) + phase-9 audit + API reference + security + tech-stack + runbooks + checklist + release notes.                                                                                |
-| Demo               | READY                              | docs/demo-runbook.md + demo-script.md verified against running services; honest-state demo is the fallback story.                                                                                                   |
-| Testing            | READY                              | pnpm verify pipeline: format/lint/typecheck/168 TS tests/45 Python/19 Rust/Go + security audit — all green.                                                                                                         |
+| Category           | Status                                  | Evidence                                                                                                                                                                            |
+| ------------------ | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PRODUCT            | READY                                   | All 10 terminal pages + detail views; positioning docs; no fabricated states. `pnpm build` clean.                                                                                   |
+| MARKET DATA        | NEEDS REVIEW                            | 6 documented RWA endpoints integrated and schema-verified; live gateway round-trip proven (signed request → 40101 with placeholder creds). Real payloads require valid credentials. |
+| OPPORTUNITY ENGINE | READY                                   | Deterministic engine; boundary tests at thresholds; NOT_CONFIGURED vs NO_SIGNAL distinction; 40 markets tests.                                                                      |
+| STRATEGY AGENT     | READY                                   | 4-layer validation; adversarial matrix (hostile prompts never produce executable strategies); clarification flow; hermetic tests.                                                   |
+| RISK ENGINE        | READY                                   | Rust; 10 named rules; invariant tests (over-limit/invalid never APPROVED); clippy -D warnings; /readiness reports rules loaded.                                                     |
+| TRADING            | NEEDS REVIEW                            | Quote/swap/approve implemented per OpenAPI and unit-tested; live payloads require valid credentials.                                                                                |
+| SIMULATION         | READY (mechanism) / NEEDS REVIEW (live) | SWAP-mode PASSED gate enforced; RFQ vendor-validated; live call requires credentials.                                                                                               |
+| WALLET             | NEEDS REVIEW                            | Agentic Wallet adapter fails closed NOT_CONFIGURED (baw CLI command surface unconfirmed); executor wallet not provisioned.                                                          |
+| EXECUTION          | READY (mechanism) / NEEDS REVIEW (live) | Go state machine, scope binding, kill switch, chain guard, idempotency all tested; signing requires executor key.                                                                   |
+| PORTFOLIO          | NEEDS REVIEW                            | Honest 503 states until wallet provisioning; balances endpoint implemented per documented Wallet API.                                                                               |
+| SECURITY           | READY                                   | Checklist 24 PASS / 2 NEEDS_REVIEW / 0 FAIL; scanner zero findings; adversarial + binding + replay tests green; no secrets in browser (in-browser verified).                        |
+| DEPLOYMENT         | NEEDS REVIEW                            | Production builds green; docs/deployment.md complete; no hosted environment provisioned (no credentials/infrastructure committed).                                                  |
+| DEMO               | READY                                   | Canonical demo path + script + recording checklist; verified live including honest setup states.                                                                                    |
+| DOCUMENTATION      | READY                                   | README final; submission package (13 docs); architecture, security, API reference, runbooks; dev-report factual.                                                                    |
+| TESTING            | READY                                   | pnpm verify exit 0: 174 TS + 45 Python + 19 Rust + Go packages; security audit zero findings.                                                                                       |
 
-## Summary
+## NEEDS REVIEW summary
 
-- **READY:** Core Product, Market Data (code), Opportunity Engine, Strategy
-  Agent, Risk Engine, Trading (code), Simulation (code), Execution (code),
-  Security, Observability, Frontend, Backend, Deployment, Documentation, Demo,
-  Testing.
-- **NEEDS REVIEW:** Wallet (provisioning), Portfolio (wallet-dependent), Live
-  micro-trade (credentials + funded wallet + manual authorization per runbook).
-- **BLOCKED:** none.
+1. **Market Data / Trading / Simulation live payloads** — blocked solely by
+   valid Binance Web3 credentials (operator: enable Web3 API for the key in
+   the Developer Portal).
+2. **Wallet / Portfolio** — blocked by Agentic Wallet provisioning (baw CLI +
+   Binance App sign-in) and executor wallet funding.
+3. **Deployment** — no hosted environment; manual procedure documented.
+
+None of these are code gaps; all are external provisioning steps with the
+required procedures already documented.

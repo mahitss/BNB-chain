@@ -1,70 +1,49 @@
-# Final Architecture
-
-## Mermaid diagram
+# OLYR Final Architecture (v1.0.0)
 
 ```mermaid
 flowchart TB
-    U[User] --> T[OLYR Terminal · Next.js]
-    T -->|HTTP/JSON| API[Fastify API :4000]
+    U[User] --> T[OLYR Terminal · Next.js :3000]
+    T -->|HTTP/JSON · only public surface| API[Fastify API :4000]
 
     API --> REG[Strategy Registry · Prisma/Postgres]
-    API --> AGENT[Strategy Agent · Python/FastAPI]
-    API --> MKT[Market/RWA Data · @olyr/binance]
+    API --> RWA[Binance RWA Data · @olyr/binance HMAC-signed]
+    API --> MI[Market Intelligence · calendar/freshness/spread]
     API --> OPP[Opportunity Engine · deterministic]
+    API --> AGENT[Strategy Agent · Python :8005]
     API --> PORT[Portfolio]
-    API --> PROP[Trade Proposals]
-    API --> LOOP[Bounded Agent Loop]
 
-    AGENT -->|intent only| LLM[LLM Provider · abstracted]
+    AGENT -->|intent JSON only| LLM[LLM Provider · abstracted]
     AGENT -->|read-only tools| API
 
-    PROP --> RISK[Rust Risk Engine · 10 rules]
-    RISK -->|APPROVED / REJECTED / REQUIRES_REVIEW| PROP
-    PROP --> QUOTE[Trading API Quote]
-    QUOTE --> SIM[Transaction Simulation]
-    SIM --> AUTH[Authorization · MANUAL/BOUNDED/DISABLED]
-    AUTH --> EXEC[Go Execution Service · sole signer]
-
-    EXEC -->|signed artifact| BCAST[Transaction Broadcast / RFQ Submit]
-    BCAST --> BSC[BNB Smart Chain]
-    BSC --> VERIFY[Transaction Verification]
-    VERIFY --> DB[(PostgreSQL · Audit Trail)]
-
-    DB --> T
-
-    subgraph security [Security boundaries]
-        S1[LLM: no keys, no tools, no network beyond provider]
-        S2[Browser: talks to API only]
-        S3[Go: only signer, keys never leave process]
-        S4[Rust: deterministic, no LLM, no I/O]
-    end
+    OPP --> PROP[Trade Proposals]
+    PROP --> RISK[Rust Risk Engine :8002 · 10 rules · no LLM · no I/O]
+    RISK -->|APPROVED| QUOTE[Quote · Trading API · TTL 30s]
+    QUOTE --> TX[Unsigned Transaction · /aggregator/swap]
+    TX --> SIM[Simulation · /pre-transaction/simulate]
+    SIM -->|PASSED| AUTH[Authorization Gate · MANUAL/BOUNDED/DISABLED]
+    AUTH -->|valid| EXEC[Go Execution Service :8001 · sole signer]
+    EXEC -->|signed artifact via token-guarded internal API| BCAST[Broadcast / RFQ Submit]
+    BCAST --> BSC[BNB Smart Chain · chain 56]
+    BSC --> VERIFY[On-chain Verification · /aggregator/history]
+    VERIFY --> AUD[(Audit Trail + Portfolio · PostgreSQL)]
 ```
 
-## Trust boundaries
+## Trust boundaries (marked)
 
-1. **Browser → API**: the only public surface. Credentials never cross it.
-2. **API → Rust**: proposals are evaluated; the Rust engine is deterministic,
-   stateless, and LLM-free.
-3. **API → Go**: signed internal-token contract; Go verifies the full
-   chain-of-custody bundle before signing.
-4. **Agent → LLM**: raw text in, raw JSON out; everything after is
-   deterministic validation.
-5. **Everything → BSC**: settlement happens only through the gated pipeline.
+| Boundary                | Enforcement                                                                                                                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AI boundary**         | The agent emits one validated JSON document. No tools, no keys, no network beyond the LLM provider. Validators reject anything oversized, unsupported, or injected.                 |
+| **Risk boundary**       | Only the Rust engine approves execution — 10 deterministic rules, no LLM, no I/O, no state.                                                                                         |
+| **Wallet boundary**     | Only the Go service holds the executor key; it re-verifies the full chain-of-custody bundle (proposal/quote/simulation/authorization) before signing, and re-checks chain identity. |
+| **Blockchain boundary** | Broadcast requires every prior gate; broadcast ≠ confirmed — on-chain verification is a separate, mandatory step.                                                                   |
 
-## Component responsibilities (verified)
+## Service inventory (verified)
 
-| Component   | Responsibility                        | Never does                                      |
-| ----------- | ------------------------------------- | ----------------------------------------------- |
-| Terminal    | render real state                     | fabricate data, reach backend services directly |
-| Fastify API | orchestrate, validate, persist        | sign transactions                               |
-| Agent       | interpret intent                      | execute, hold keys, mutate policy               |
-| Risk engine | approve/reject deterministically      | touch network, LLM, or state                    |
-| Go service  | verify gates, sign, broadcast, verify | accept arbitrary transactions                   |
-| PostgreSQL  | persist state + audit                 | hold secrets                                    |
-
-## Phase history
-
-P1 foundation · P2 Binance RWA data · P3 market intelligence · P4 strategy
-agent · P5 risk engine + proposals · P6 quotes/simulation/controlled
-execution · P7 Agentic Wallet + bounded loop · P8 terminal UI · P9
-hardening + mainnet readiness · P10 final release.
+| Service     | Port | Stack              | Responsibility                                                                     |
+| ----------- | ---- | ------------------ | ---------------------------------------------------------------------------------- |
+| Terminal    | 3000 | Next.js 16         | Real-state UI, honest empty/error states                                           |
+| API         | 4000 | Fastify 5 + Prisma | All routes, validation, persistence, orchestration                                 |
+| Agent       | 8005 | Python/FastAPI     | Intent interpretation, 4-layer validation, read-only tools                         |
+| Risk engine | 8002 | Rust/axum          | Deterministic execution authority                                                  |
+| Execution   | 8001 | Go + go-ethereum   | Sole signer, state machine, idempotency                                            |
+| PostgreSQL  | 5432 | Prisma 6           | Registry, proposals, quotes, simulations, authorizations, executions, audit events |
