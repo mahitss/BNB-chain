@@ -16,6 +16,7 @@ interface AgentStatusResponse {
   activeStrategies: number;
   totalStrategies: number;
   lastScanAt: string | null;
+  lastRun: { at: string | null; ok: boolean | null; error: string | null } | null;
   opportunities: MarketOpportunity[];
   timestamp: string;
 }
@@ -98,6 +99,20 @@ export default function AgentPage() {
             : (stateQuery.data?.detail ?? "Bounded agent loop is disabled.")}
         </p>
       </header>
+
+      {status.lastRun && status.lastRun.ok === false && (
+        <div
+          role="alert"
+          className="mt-6 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm leading-relaxed text-red-300"
+        >
+          Last scan failed
+          {status.lastRun.at
+            ? ` at ${new Date(status.lastRun.at).toLocaleTimeString("en-US", { hour12: false })}`
+            : ""}
+          : {status.lastRun.error ?? "unknown error"}. The agent loop is active but could not
+          evaluate market data.
+        </div>
+      )}
 
       <section className="mt-8">
         <h2 className="font-mono text-xs uppercase tracking-widest text-zinc-500">

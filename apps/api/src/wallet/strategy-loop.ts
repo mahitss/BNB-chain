@@ -75,8 +75,25 @@ export class StrategyLoopWorker {
   private readonly handledSignals = new Map<string, number>();
   /** strategyId → last execution instant. */
   private readonly lastExecutionByStrategy = new Map<string, string>();
+  /** Last observed run status — surfaced so UI never implies success on failure. */
+  private lastRun: { at: string; ok: boolean; error: string | null } | null = null;
 
   constructor(private readonly options: StrategyLoopOptions) {}
+
+  /** Honest run status for /api/agent/status — failures surfaced, not hidden. */
+  getStatus(): {
+    running: boolean;
+    lastRunAt: string | null;
+    lastRunOk: boolean | null;
+    lastRunError: string | null;
+  } {
+    return {
+      running: this.running,
+      lastRunAt: this.lastRun?.at ?? null,
+      lastRunOk: this.lastRun?.ok ?? null,
+      lastRunError: this.lastRun?.error ?? null,
+    };
+  }
 
   start(): void {
     if (this.timer || this.stopped) return;
@@ -111,14 +128,19 @@ export class StrategyLoopWorker {
     const previous = this.currentRun;
     this.currentRun = (async () => {
       await previous.catch(() => {});
+      let runError: string | null = null;
       try {
         await this.evaluateStrategies(trigger);
       } catch (error) {
-        this.options.logger.error("agent_loop.error", {
-          message: error instanceof Error ? error.message : String(error),
-        });
+        runError = error instanceof Error ? error.message : String(error);
+        this.options.logger.error("agent_loop.error", { message: runError });
       } finally {
         this.running = false;
+        this.lastRun = {
+          at: new Date().toISOString(),
+          ok: runError === null,
+          error: runError,
+        };
       }
     })();
     await this.currentRun;

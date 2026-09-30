@@ -330,6 +330,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       activeStrategies: active.length,
       totalStrategies: strategies.length,
       lastScanAt: latest.completedAt,
+      lastRun: strategyLoop?.getStatus() ?? null,
       opportunities: latest.opportunities,
       timestamp: new Date().toISOString(),
     };
