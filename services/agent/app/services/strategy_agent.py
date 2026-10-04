@@ -79,9 +79,12 @@ class StrategyAgent:
 
         events.append(AgentEventOut(type="VALIDATION_PASSED"))
         events.append(AgentEventOut(type="STRATEGY_PARSED", detail={"name": strategy.name}))
+        # exclude_none: observation actions (OBSERVE/ALERT) carry no trade
+        # size, so maxUsd must be ABSENT from the output — the API registry
+        # rejects an explicit null and must never receive one.
         return {
             "status": "PARSED",
-            "strategy": strategy.model_dump(by_alias=True),
+            "strategy": strategy.model_dump(by_alias=True, exclude_none=True),
             "errors": [],
             "events": _dump(events),
         }

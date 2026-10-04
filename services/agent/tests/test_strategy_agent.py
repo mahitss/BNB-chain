@@ -208,6 +208,39 @@ class TestValidationFailures:
         assert any(e["code"] == "missing-strategy" for e in result["errors"])
 
 
+class TestAlertSerialization:
+    # Live OpenRouter output for observation intents carries an explicit
+    # "maxUsd": null. The PARSED output must OMIT the key entirely — the
+    # API registry rejects explicit null and ALERT carries no trade size.
+    ALERT_WITH_NULL = (
+        '{"status": "PARSED", "strategy": {"name": "NVDA close premium alert",'
+        '"asset": {"ticker": "NVDA"},'
+        '"conditions": ['
+        '{"field": "market_state", "operator": "equals", "value": "CLOSED"},'
+        '{"field": "spread_percent", "operator": "greater_than_or_equal", "value": 0.5}'
+        "],"
+        '"action": {"type": "ALERT", "maxUsd": null}}}'
+    )
+
+    async def test_alert_output_omits_max_usd(self):
+        result = await make_agent(self.ALERT_WITH_NULL).parse("alert on NVDA premium")
+        assert result["status"] == "PARSED"
+        assert "maxUsd" not in result["strategy"]["action"]
+        assert result["strategy"]["action"]["type"] == "ALERT"
+
+    async def test_alert_without_max_usd_passes_all_layers(self):
+        result = await make_agent(self.ALERT_WITH_NULL).parse("alert on NVDA premium")
+        assert result["status"] == "PARSED"
+        assert result["errors"] == []
+        types = [e["type"] for e in result["events"]]
+        assert "VALIDATION_PASSED" in types
+
+    async def test_trade_action_retains_max_usd(self):
+        result = await make_agent(VALID_PARSE).parse("Watch NVDA, reduce 1.5% premium, $20")
+        assert result["status"] == "PARSED"
+        assert result["strategy"]["action"]["maxUsd"] == 20
+
+
 class TestPromptInjection:
     async def test_injection_attempt_is_neutralized_by_validators(self):
         # Simulates a model that "obeyed" an injected instruction: it returns
