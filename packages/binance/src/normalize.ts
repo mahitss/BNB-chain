@@ -64,12 +64,17 @@ export function normalizeMarketStatus(
   if (!raw) {
     return null;
   }
+  if (raw.marketStatus === null || raw.marketStatus === undefined || raw.marketStatus === "") {
+    // Live gateway reports an unavailable phase as null: preserve it as the
+    // domain null (UNKNOWN/UNAVAILABLE downstream) — never invent a phase.
+    return null;
+  }
   const phase = MARKET_PHASES.find((p) => p === raw.marketStatus);
   if (!phase) {
-    // Unknown phase from the API: keep the data but never invent a phase.
-    throw new BinanceMalformedResponseError(
-      `Unknown marketStatus value: ${String(raw.marketStatus)}`,
-    );
+    // Undocumented phase observed live (e.g. "offhours"): the whole listing
+    // must not fail — map to domain null so downstream reports UNKNOWN with
+    // a calendar fallback warning instead of a 502. Never invent a phase.
+    return null;
   }
   return {
     openState: raw.openState === true,
@@ -235,14 +240,7 @@ export function normalizeUnderlyingMarket(raw: RawRwaUnderlyingMarket): Underlyi
     tokenContractAddress: raw.tokenContractAddress,
     platformId: raw.platformId,
     assetType,
-    statusInfo: normalizeMarketStatus(raw.statusInfo) ?? {
-      openState: false,
-      marketStatus: "closed",
-      reasonCode: null,
-      reasonMsg: null,
-      nextOpenTime: null,
-      nextCloseTime: null,
-    },
+    statusInfo: normalizeMarketStatus(raw.statusInfo),
     marketData: {
       referencePrice: market ? pick(market.referencePrice) : null,
       high52W: market ? pick(market.high52W) : null,

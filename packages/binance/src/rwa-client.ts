@@ -139,7 +139,28 @@ export class HttpBinanceRwaClient implements BinanceRwaClient {
         tabId: filters?.tabId === undefined ? undefined : String(filters.tabId),
       },
     );
-    return data.map((raw) => normalizeTokenListing(raw, timestamp));
+    const listings: TokenizedAssetListing[] = [];
+    for (const raw of data) {
+      try {
+        listings.push(normalizeTokenListing(raw, timestamp));
+      } catch (error) {
+        // One malformed row (e.g. undocumented assetType null observed live)
+        // must not fail the whole listing: skip it with a warn log carrying
+        // only public on-chain identifiers, never credentials.
+        if (error instanceof BinanceMalformedResponseError) {
+          this.logger.warn("binance.skip_malformed_token", {
+            tokenContractAddress:
+              typeof raw.tokenContractAddress === "string" ? raw.tokenContractAddress : null,
+            underlyingTicker:
+              typeof raw.underlyingTicker === "string" ? raw.underlyingTicker : null,
+            reason: error.message.slice(0, 120),
+          });
+          continue;
+        }
+        throw error;
+      }
+    }
+    return listings;
   }
 
   async getTokenPrices(

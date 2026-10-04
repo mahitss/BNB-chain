@@ -99,8 +99,32 @@ describe("HttpBinanceRwaClient", () => {
     assert.equal(listings[0]!.asset.underlyingTicker, "SPY");
   });
 
-  it("maps a 40102 envelope to BinanceAuthError without retry", async () => {
-    let calls = 0;
+  it("skips a malformed row instead of failing the whole listing", async () => {
+    const fixture = TOKENS_FIXTURE as unknown as {
+      code: number;
+      msg: string;
+      data: Record<string, unknown>[];
+      timestamp: number;
+      success: boolean;
+    };
+    const badRow = {
+      ...(fixture.data[0] as Record<string, unknown>),
+      tokenContractAddress: "0xbad0000000000000000000000000000000000001",
+      assetType: null,
+    };
+    const { fetchImpl } = mockFetch(() => ({
+      status: 200,
+      body: JSON.stringify({ ...fixture, data: [...fixture.data, badRow] }),
+    }));
+    const client = makeClient(fetchImpl);
+    const listings = await client.listTokens({ chainId: "56" });
+    assert.equal(listings.length, fixture.data.length);
+    assert.ok(
+      listings.every((l) => l.asset.tokenContractAddress !== "0xbad0000000000000000000000000000000000001"),
+    );
+  });
+
+  it("maps a 40102 envelope to BinanceAuthError without retry", async () => {    let calls = 0;
     const { fetchImpl } = mockFetch(() => {
       calls++;
       return {

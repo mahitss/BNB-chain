@@ -232,7 +232,8 @@ export interface UnderlyingMarketSnapshot {
   tokenContractAddress: string;
   platformId: string;
   assetType: RwaAssetType;
-  statusInfo: RwaMarketStatusInfo;
+  /** Null when Binance reports no phase — never inferred as a real state. */
+  statusInfo: RwaMarketStatusInfo | null;
   marketData: {
     referencePrice: string | null;
     high52W: string | null;

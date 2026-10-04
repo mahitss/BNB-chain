@@ -56,6 +56,72 @@ describe("normalizeTokenListing (rwa/tokens fixture)", () => {
     assert.equal(listing.asset.tokenToShareRatio, null);
     assert.deepEqual(listing.asset.tags, []);
   });
+
+  it("maps a null inner marketStatus to null instead of failing", () => {
+    const raw = {
+      ...(envelope.data[0] as unknown as Record<string, unknown>),
+      statusInfo: {
+        openState: false,
+        marketStatus: null,
+        reasonCode: null,
+        reasonMsg: null,
+        nextOpenTime: null,
+        nextCloseTime: null,
+      },
+    } as unknown as RawRwaToken;
+    const listing = normalizeTokenListing(raw, envelope.timestamp);
+    assert.equal(listing.statusInfo, null);
+  });
+
+  it("never classifies a null marketStatus as OPEN or CLOSED", () => {
+    const raw = {
+      ...(envelope.data[0] as unknown as Record<string, unknown>),
+      statusInfo: {
+        openState: false,
+        marketStatus: null,
+        reasonCode: null,
+        reasonMsg: null,
+        nextOpenTime: null,
+        nextCloseTime: null,
+      },
+    } as unknown as RawRwaToken;
+    const listing = normalizeTokenListing(raw, envelope.timestamp);
+    assert.equal(listing.statusInfo, null);
+    assert.notDeepEqual(listing.statusInfo, { marketStatus: "open" });
+    assert.notDeepEqual(listing.statusInfo, { marketStatus: "closed" });
+  });
+
+  it("maps an empty-string marketStatus to null instead of failing", () => {
+    const raw = {
+      ...(envelope.data[0] as unknown as Record<string, unknown>),
+      statusInfo: {
+        openState: false,
+        marketStatus: "",
+        reasonCode: null,
+        reasonMsg: null,
+        nextOpenTime: null,
+        nextCloseTime: null,
+      },
+    } as unknown as RawRwaToken;
+    const listing = normalizeTokenListing(raw, envelope.timestamp);
+    assert.equal(listing.statusInfo, null);
+  });
+
+  it("maps an undocumented phase to null instead of failing the listing", () => {
+    const raw = {
+      ...(envelope.data[0] as unknown as Record<string, unknown>),
+      statusInfo: {
+        openState: false,
+        marketStatus: "offhours",
+        reasonCode: null,
+        reasonMsg: null,
+        nextOpenTime: null,
+        nextCloseTime: null,
+      },
+    } as unknown as RawRwaToken;
+    const listing = normalizeTokenListing(raw, envelope.timestamp);
+    assert.equal(listing.statusInfo, null);
+  });
 });
 
 describe("normalizePriceQuote (rwa/price fixture)", () => {
@@ -79,7 +145,7 @@ describe("normalizePriceQuote (rwa/price fixture)", () => {
 });
 
 describe("normalizeUnderlyingMarket", () => {
-  it("normalizes market data with defaults for a missing status object", () => {
+    it("maps a missing status object to null, never a fabricated phase", () => {
     const raw = {
       binanceChainId: "56",
       tokenContractAddress: "0xabc",
@@ -104,7 +170,40 @@ describe("normalizeUnderlyingMarket", () => {
     };
     const snapshot = normalizeUnderlyingMarket(raw);
     assert.equal(snapshot.marketData.high52W, "75.00");
-    assert.equal(snapshot.statusInfo.marketStatus, "closed");
-    assert.equal(snapshot.statusInfo.openState, false);
+    assert.equal(snapshot.statusInfo, null);
+  });
+
+  it("maps a null inner marketStatus to null, never OPEN or CLOSED", () => {
+    const raw = {
+      binanceChainId: "56",
+      tokenContractAddress: "0xabc",
+      platformId: "ondo",
+      assetType: 1,
+      statusInfo: {
+        openState: false,
+        marketStatus: null,
+        reasonCode: null,
+        reasonMsg: null,
+        nextOpenTime: null,
+        nextCloseTime: null,
+      },
+      marketData: {
+        referencePrice: "61.70",
+        high52W: "75.00",
+        low52W: "55.00",
+        volumeShares24H: "1000",
+        avgDailyVolume1Y: "2000",
+        totalShares: "1000000",
+        marketCap: "61700000",
+        turnoverRate: "0.5",
+        amplitude: "1.2",
+        peRatioTTM: null,
+        pbRatio: null,
+        dividendYield: null,
+        latestDividend: null,
+      },
+    };
+    const snapshot = normalizeUnderlyingMarket(raw);
+    assert.equal(snapshot.statusInfo, null);
   });
 });

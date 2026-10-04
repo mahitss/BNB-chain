@@ -26,7 +26,8 @@ export interface RawRwaPlatform {
 
 export interface RawRwaMarketStatusInfo {
   openState: boolean;
-  marketStatus: string;
+  /** Live gateway returns null when the phase is unavailable — never inferred. */
+  marketStatus: string | null;
   reasonCode: string | null;
   reasonMsg: string | null;
   nextOpenTime: number | null;
