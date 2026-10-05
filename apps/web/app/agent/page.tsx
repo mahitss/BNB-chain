@@ -69,6 +69,13 @@ export default function AgentPage() {
               {statusQuery.error instanceof Error ? statusQuery.error.message : "unknown"}
             </p>
           )}
+          <button
+            type="button"
+            onClick={() => void statusQuery.refetch()}
+            className="mt-4 rounded border border-amber-500/40 px-3 py-1.5 font-mono text-xs text-amber-300 transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70"
+          >
+            RETRY
+          </button>
         </div>
       </main>
     );
