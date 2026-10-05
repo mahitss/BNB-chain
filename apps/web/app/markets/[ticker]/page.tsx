@@ -17,13 +17,26 @@ import {
   Stat,
   toneForStatus,
 } from "../../../components/ui";
-import type { MarketSnapshot } from "@olyr/types";
+import type { MarketOpportunity, MarketSnapshot } from "@olyr/types";
+
+function usdDifference(onChain: string | null, reference: string | null): string {
+  if (onChain === null || reference === null) return "Unavailable";
+  const diff = Number(onChain) - Number(reference);
+  if (!Number.isFinite(diff)) return "Unavailable";
+  return `${diff >= 0 ? "+" : ""}$${diff.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+}
 
 export default function AssetDetailPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
   const snapshotQuery = useQuery({
     queryKey: ["snapshot", ticker],
     queryFn: () => apiGet<MarketSnapshot>(`/api/market/${encodeURIComponent(ticker)}/snapshot`),
+    refetchInterval: 30_000,
+  });
+  const opportunityQuery = useQuery({
+    queryKey: ["opportunity", ticker],
+    queryFn: () =>
+      apiGet<MarketOpportunity>(`/api/opportunities/${encodeURIComponent(ticker)}`),
     refetchInterval: 30_000,
   });
 
@@ -104,6 +117,11 @@ export default function AssetDetailPage({ params }: { params: Promise<{ ticker: 
               s.liquidity.totalLiquidityUsd ? `${s.liquidity.poolCount ?? "?"} pools` : undefined
             }
           />
+          <Stat
+            label="Difference"
+            value={usdDifference(s.onChainPrice, s.referencePrice)}
+            tone="neutral"
+          />
         </div>
         {s.warnings.length > 0 && (
           <div className="border-t border-zinc-800 px-5 py-3">
@@ -117,6 +135,63 @@ export default function AssetDetailPage({ params }: { params: Promise<{ ticker: 
             </ul>
           </div>
         )}
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader title="Why this signal exists" />
+        <div className="p-5">
+          {opportunityQuery.isPending ? (
+            <Skeleton lines={3} />
+          ) : opportunityQuery.isError || !opportunityQuery.data ? (
+            <p className="text-sm text-zinc-400">
+              No engine evaluation available for this asset right now — no signal is claimed.
+            </p>
+          ) : (
+            <div>
+              <p className="text-sm text-zinc-300">
+                {opportunityQuery.data.direction === "NONE" ||
+                opportunityQuery.data.spreadPercent === null ? (
+                  <>No measurable divergence versus the reference price.</>
+                ) : (
+                  <>
+                    Tokenized price is{" "}
+                    {Math.abs(Number(opportunityQuery.data.spreadPercent)).toFixed(2)}%{" "}
+                    {opportunityQuery.data.direction === "PREMIUM" ? "above" : "below"} the
+                    reference price.
+                  </>
+                )}{" "}
+                Engine status:{" "}
+                <span className="font-mono">{opportunityQuery.data.status}</span>.
+              </p>
+              {opportunityQuery.data.reasons.length > 0 && (
+                <ul className="mt-3 space-y-1.5 text-sm text-zinc-300">
+                  {opportunityQuery.data.reasons.map((reason, i) => (
+                    <li key={i}>
+                      <span aria-hidden>• </span>
+                      {reason.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {opportunityQuery.data.warnings.length > 0 && (
+                <ul className="mt-3 space-y-1 text-xs text-amber-300/90">
+                  {opportunityQuery.data.warnings.map((w, i) => (
+                    <li key={i}>
+                      <span aria-hidden>! </span>
+                      {w.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link
+                href={`/opportunities/${encodeURIComponent(opportunityQuery.data.id)}`}
+                className="mt-3 inline-block text-xs text-amber-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+              >
+                Open signal detail →
+              </Link>
+            </div>
+          )}
+        </div>
       </Card>
 
       <Card className="mt-4">

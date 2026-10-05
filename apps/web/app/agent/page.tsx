@@ -90,15 +90,47 @@ export default function AgentPage() {
                 status.loopEnabled ? "bg-emerald-400" : "bg-amber-400"
               }`}
             />
-            {status.loopEnabled ? "ACTIVE" : "STANDBY"}
+            {status.loopEnabled ? "RUNNING" : "STANDBY"}
           </h1>
         </div>
         <p className="font-mono text-xs text-zinc-500">
-          {status.loopEnabled
-            ? `Monitoring ${status.activeStrategies} strategies · ${status.totalStrategies} total`
-            : (stateQuery.data?.detail ?? "Bounded agent loop is disabled.")}
+          policy {status.executionPolicy} · cooldowns + dedup enforced server-side
         </p>
       </header>
+
+      <div
+        aria-label="Agent telemetry"
+        className="mt-6 flex flex-col divide-y divide-zinc-800/80 rounded-lg border border-zinc-800 bg-zinc-900/40 sm:flex-row sm:divide-x sm:divide-y-0"
+      >
+        {[
+          { label: "Status", value: status.loopEnabled ? "RUNNING" : "STANDBY" },
+          {
+            label: "Monitoring",
+            value: `${status.activeStrategies} of ${status.totalStrategies} strategies`,
+          },
+          {
+            label: "Last scan",
+            value: status.lastScanAt
+              ? new Date(status.lastScanAt).toLocaleTimeString("en-US", { hour12: false })
+              : "never",
+          },
+        ].map((s) => (
+          <div key={s.label} className="min-w-0 flex-1 px-4 py-3">
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+              {s.label}
+            </p>
+            <p className="mt-0.5 truncate font-mono text-base font-medium text-zinc-100">
+              {s.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-3 font-mono text-xs text-zinc-500">
+        {status.loopEnabled
+          ? `Monitoring ${status.activeStrategies} strategies · ${status.totalStrategies} total`
+          : (stateQuery.data?.detail ?? "Bounded agent loop is disabled.")}
+      </p>
 
       {status.lastRun && status.lastRun.ok === false && (
         <div
@@ -151,12 +183,31 @@ export default function AgentPage() {
                   {o.status}
                 </p>
                 {o.reasons.length > 0 && (
-                  <ul className="mt-2 space-y-0.5 text-xs text-zinc-400">
-                    {o.reasons.slice(0, 3).map((reason, i) => (
-                      <li key={i}>• {reason.message}</li>
-                    ))}
-                  </ul>
+                  <div className="mt-2">
+                    <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
+                      Why it matters
+                    </p>
+                    <ul className="mt-1 space-y-0.5 text-xs text-zinc-400">
+                      {o.reasons.slice(0, 3).map((reason, i) => (
+                        <li key={i}>• {reason.message}</li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
+                <p className="mt-2 text-xs">
+                  <span className="text-zinc-500">Available action: </span>
+                  {o.status === "BLOCKED" ? (
+                    <span className="text-zinc-300">blocked — see signal detail</span>
+                  ) : (
+                    <span className="text-zinc-300">monitor via signal detail</span>
+                  )}{" "}
+                  <a
+                    href={`/opportunities/${encodeURIComponent(o.id)}`}
+                    className="text-amber-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                  >
+                    View intelligence →
+                  </a>
+                </p>
               </div>
             ))}
           </div>

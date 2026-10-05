@@ -112,6 +112,33 @@ export default function OpportunityDetailPage({ params }: { params: Promise<{ id
       </Card>
 
       <Card className="mt-4">
+        <CardHeader title="Next possible action" />
+        <div className="p-5 text-sm leading-relaxed text-zinc-300">
+          {o.status === "NO_SIGNAL" || o.status === "DATA_UNAVAILABLE" ? (
+            <p>
+              No action — {o.status === "NO_SIGNAL" ? "within thresholds" : "insufficient data"}.
+              Proposals originate from saved strategies and still require risk approval, a fresh
+              quote, simulation, and human authorization.
+            </p>
+          ) : (
+            <div>
+              <p>
+                This signal alone creates nothing. To act on it, save a matching strategy — a
+                trade proposal then requires risk-engine approval, a fresh quote, simulation,
+                and human authorization, in that order.
+              </p>
+              <Link
+                href="/strategies"
+                className="mt-3 inline-block text-xs text-amber-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+              >
+                Open strategy builder →
+              </Link>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Card className="mt-4">
         <CardHeader title="What prevents execution" />
         <div className="p-5">
           {o.warnings.length === 0 ? (

@@ -294,25 +294,54 @@ export default function StrategiesPage() {
       {preview?.status === "PARSED" && preview.strategy && (
         <section className="mt-8 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-5">
           <h2 className="font-mono text-xs uppercase tracking-widest text-emerald-400">
-            Strategy preview · VALID
+            Interpreted strategy · VALID
           </h2>
-          <p className="mt-3 text-lg font-semibold text-zinc-50">{preview.strategy.name}</p>
-          <ul className="mt-3 space-y-1 text-sm text-zinc-300">
+          <dl className="mt-4 space-y-2 text-sm">
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+              <dt className="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-zinc-500">
+                Intent
+              </dt>
+              <dd className="font-semibold text-zinc-50">{preview.strategy.name}</dd>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+              <dt className="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-zinc-500">
+                Asset
+              </dt>
+              <dd className="font-mono text-zinc-100">{preview.strategy.asset.ticker}</dd>
+            </div>
             {preview.strategy.conditions.map((condition, index) => (
-              <li key={index} className="font-mono">
-                • {condition.field} {condition.operator.replace(/_/g, " ")}{" "}
-                {String(condition.value)}
-              </li>
+              <div key={index} className="flex flex-wrap gap-x-3 gap-y-0.5">
+                <dt className="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-zinc-500">
+                  {index === 0 ? "Conditions" : ""}
+                </dt>
+                <dd className="font-mono text-zinc-100">
+                  {condition.field} {condition.operator.replace(/_/g, " ")}{" "}
+                  {String(condition.value)}
+                </dd>
+              </div>
             ))}
-          </ul>
-          <p className="mt-3 text-sm text-zinc-300">
-            Action: <span className="font-mono">{preview.strategy.action.type}</span>
-            {preview.strategy.action.maxUsd !== undefined && (
-              <>
-                {" "}
-                · Maximum: <span className="font-mono">${preview.strategy.action.maxUsd}</span>
-              </>
-            )}
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+              <dt className="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-zinc-500">
+                Action
+              </dt>
+              <dd className="font-mono text-zinc-100">
+                {preview.strategy.action.type}
+                {preview.strategy.action.maxUsd !== undefined &&
+                  ` · max $${preview.strategy.action.maxUsd}`}
+              </dd>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+              <dt className="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-zinc-500">
+                Validation
+              </dt>
+              <dd className="font-mono text-xs text-emerald-400">
+                Schema ✓ · Semantic ✓ · Capability ✓ · Safety ✓
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-3 text-xs leading-relaxed text-zinc-500">
+            Natural language → deterministic strategy. The agent interprets intent only; every
+            layer above was enforced by validators, and saving re-validates server-side.
           </p>
           {saveMutation.isError && (
             <p className="mt-3 rounded border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">

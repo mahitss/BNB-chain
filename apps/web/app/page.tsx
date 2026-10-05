@@ -41,6 +41,7 @@ interface OpportunitiesResponse {
 
 interface AgentStatus {
   loopEnabled: boolean;
+  executionPolicy: string;
   activeStrategies: number;
   totalStrategies: number;
   lastScanAt: string | null;
@@ -318,6 +319,49 @@ export default function OverviewPage() {
             )}
           </div>
         </Card>
+      </section>
+
+      {/* Why it matters + safety state — the product in one glance. */}
+      {notable.length > 0 && notable[0]?.reasons[0] && (
+        <section aria-label="Why it matters" className="mt-4">
+          <Card className="px-5 py-4">
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+              Why it matters
+            </p>
+            <p className="mt-1 text-sm text-zinc-300">
+              <span className="font-mono text-zinc-100">{notable[0].ticker}</span> —{" "}
+              {notable[0].reasons[0].message}
+            </p>
+          </Card>
+        </section>
+      )}
+      <section aria-label="Safety state" className="mt-4">
+        <div className="flex flex-col divide-y divide-zinc-800/80 rounded-lg border border-zinc-800 bg-zinc-900/40 sm:flex-row sm:divide-x sm:divide-y-0">
+          <div className="min-w-0 flex-1 px-4 py-3">
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+              Execution policy
+            </p>
+            <p className="mt-0.5 font-mono text-base font-medium text-zinc-100">
+              {agentData?.executionPolicy ?? "UNKNOWN"}
+            </p>
+          </div>
+          <div className="min-w-0 flex-1 px-4 py-3">
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+              Proposal gate
+            </p>
+            <p className="mt-0.5 font-mono text-base font-medium text-zinc-100">
+              RISK APPROVAL REQUIRED
+            </p>
+          </div>
+          <div className="min-w-0 flex-1 px-4 py-3">
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+              Broadcasts
+            </p>
+            <p className="mt-0.5 font-mono text-base font-medium text-zinc-100">
+              {execs.length === 0 ? "NONE — NO FUNDS MOVED" : `${execs.length} recorded`}
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* Operations: agent + strategies + portfolio. */}

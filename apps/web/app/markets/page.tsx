@@ -35,6 +35,21 @@ export default function MarketsPage() {
   });
 
   const assets = assetsQuery.data?.assets ?? [];
+  const summary = useMemo(() => {
+    const platforms = new Set(assets.map((e) => e.asset.platformId));
+    return {
+      monitored: assets.length,
+      withSpread: assets.filter((e) => e.spread.percent !== null).length,
+      unknownState: assets.filter((e) => !e.marketStatus).length,
+      platforms: platforms.size,
+    };
+  }, [assets]);
+  const topDivergences = useMemo(() => {
+    return [...assets]
+      .filter((e) => e.spread.percent !== null && Number.isFinite(Number(e.spread.percent)))
+      .sort((a, b) => Math.abs(Number(b.spread.percent)) - Math.abs(Number(a.spread.percent)))
+      .slice(0, 5);
+  }, [assets]);
   const filtered = useMemo(() => {
     const query = search.trim().toUpperCase();
     if (!query) return assets;
@@ -57,6 +72,68 @@ export default function MarketsPage() {
             : undefined
         }
       />
+      <p className="mt-3 max-w-3xl text-xs leading-relaxed text-zinc-500">
+        Live Binance Web3 data. OLYR compares tokenized-equity prices on BSC with their
+        reference markets and evaluates divergence under deterministic rules — below are the
+        raw listings; ranked divergences follow.
+      </p>
+
+      {assetsQuery.data && (
+        <div
+          aria-label="Market summary"
+          className="mt-4 flex flex-col divide-y divide-zinc-800/80 rounded-lg border border-zinc-800 bg-zinc-900/40 sm:flex-row sm:divide-x sm:divide-y-0"
+        >
+          {[
+            { label: "Assets monitored", value: String(summary.monitored) },
+            { label: "With spread data", value: String(summary.withSpread) },
+            { label: "Unknown market state", value: String(summary.unknownState) },
+            { label: "Platforms", value: String(summary.platforms) },
+          ].map((s) => (
+            <div key={s.label} className="min-w-0 flex-1 px-4 py-3">
+              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+                {s.label}
+              </p>
+              <p className="mt-0.5 font-mono text-base font-medium text-zinc-100">{s.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {topDivergences.length > 0 && (
+        <section aria-label="Top live divergences" className="mt-6">
+          <h2 className="font-mono text-xs uppercase tracking-[0.25em] text-zinc-400">
+            Top live divergences
+          </h2>
+          <ul className="mt-3 divide-y divide-zinc-800/60 rounded-lg border border-zinc-800 bg-zinc-900/40">
+            {topDivergences.map(({ asset, spread, marketStatus }) => (
+              <li key={`top-${asset.chainId}:${asset.tokenContractAddress}`}>
+                <Link
+                  href={`/markets/${encodeURIComponent(asset.underlyingTicker)}`}
+                  aria-label={`${asset.underlyingTicker}, spread ${formatPercent(spread.percent)}. Open asset intelligence.`}
+                  className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-zinc-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                >
+                  <span className="w-16 shrink-0 font-mono text-base font-semibold text-zinc-50">
+                    {asset.underlyingTicker || "—"}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-lg font-medium tabular-nums text-zinc-100">
+                      {formatPercent(spread.percent)}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-zinc-500">
+                      {asset.underlyingName} · {asset.platformId} ·{" "}
+                      {marketStatus?.marketStatus ?? "UNKNOWN"}
+                    </span>
+                  </span>
+                  <StatusBadge
+                    tone={toneForStatus(marketStatus?.marketStatus ?? "UNKNOWN")}
+                    label={marketStatus?.marketStatus ?? "UNKNOWN"}
+                  />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="mt-4">
         <input

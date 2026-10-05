@@ -48,16 +48,24 @@ function RiskChecks({ decision }: { decision: RiskDecision | null }) {
   }
   return (
     <div className="mt-3 space-y-1">
-      <p className="font-mono text-xs uppercase tracking-widest text-zinc-500">Risk checks</p>
+      <p className="font-mono text-xs uppercase tracking-widest text-zinc-500">
+        Risk decision · {decision.decision}
+        {decision.timestamp ? ` · evaluated ${decision.timestamp}` : ""}
+      </p>
       <ul className="space-y-0.5 text-sm">
         {decision.rulesPassed.map((rule) => (
           <li key={rule} className="text-emerald-400 font-mono text-xs">
-            ✓ {rule}
+            ✓ {rule} · PASS
+          </li>
+        ))}
+        {decision.requiresReview.map((rule) => (
+          <li key={rule} className="text-amber-400 font-mono text-xs">
+            ! {rule} · REVIEW — human review required before any further step
           </li>
         ))}
         {decision.rulesFailed.map((rule) => (
           <li key={rule.rule} className="text-red-400 font-mono text-xs">
-            ✗ {rule.rule}
+            ✗ {rule.rule} · FAIL
             {rule.reason && (
               <span className="block pl-4 font-sans text-xs text-red-300/80">{rule.reason}</span>
             )}

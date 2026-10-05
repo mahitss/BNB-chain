@@ -105,14 +105,19 @@ export default function OpportunitiesPage() {
                   <li key={o.id}>
                     <Link
                       href={`/opportunities/${encodeURIComponent(o.id)}`}
-                      className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-3 hover:bg-zinc-800/30"
+                      className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-3 hover:bg-zinc-800/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70 focus-visible:ring-inset"
                     >
                       <span className="font-mono text-sm text-zinc-100">{o.ticker}</span>
                       <span className="flex items-center gap-4">
                         <span className="font-mono text-sm text-zinc-300">
                           {formatPercent(o.spreadPercent)}
+                          <span className="ml-1 text-[11px] text-zinc-500">
+                            {o.direction === "NONE" ? "" : o.direction}
+                          </span>
                         </span>
-                        <span className="text-xs text-zinc-500">{o.marketState}</span>
+                        <span className="text-xs text-zinc-500">
+                          {o.marketState} · {o.referenceFreshness}
+                        </span>
                         <StatusBadge tone={toneForStatus(o.status)} label={o.status} />
                       </span>
                     </Link>
