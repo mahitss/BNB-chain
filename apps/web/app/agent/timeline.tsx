@@ -64,19 +64,36 @@ export default function Timeline() {
       />
     );
   }
+  const latest = events.slice(0, 5);
+  const earlier = events.slice(5);
+  const renderEvent = (event: AgentEventRecord) => (
+    <li key={event.id} className="flex items-baseline gap-3 text-sm">
+      <span className="font-mono text-xs text-zinc-500">{formatClock(event.createdAt)}</span>
+      <span className="text-zinc-200">{FRIENDLY[event.type] ?? event.type}</span>
+      {event.detail?.["proposalId"] !== undefined && (
+        <span className="font-mono text-xs text-zinc-500">
+          {String(event.detail["proposalId"]).slice(0, 12)}…
+        </span>
+      )}
+      {event.detail?.["name"] !== undefined && (
+        <span className="truncate text-xs text-zinc-500">{String(event.detail["name"])}</span>
+      )}
+    </li>
+  );
   return (
-    <ol className="space-y-2">
-      {events.map((event) => (
-        <li key={event.id} className="flex items-baseline gap-3 text-sm">
-          <span className="font-mono text-xs text-zinc-500">{formatClock(event.createdAt)}</span>
-          <span className="text-zinc-200">{FRIENDLY[event.type] ?? event.type}</span>
-          {event.detail?.["proposalId"] !== undefined && (
-            <span className="font-mono text-xs text-zinc-500">
-              {String(event.detail["proposalId"]).slice(0, 12)}…
-            </span>
-          )}
-        </li>
-      ))}
-    </ol>
+    <div>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
+        Latest activity
+      </p>
+      <ol className="mt-2 space-y-2">{latest.map(renderEvent)}</ol>
+      {earlier.length > 0 && (
+        <>
+          <p className="mt-4 font-mono text-[11px] uppercase tracking-widest text-zinc-600">
+            Earlier history
+          </p>
+          <ol className="mt-2 space-y-2 opacity-80">{earlier.map(renderEvent)}</ol>
+        </>
+      )}
+    </div>
   );
 }

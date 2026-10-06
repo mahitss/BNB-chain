@@ -85,6 +85,54 @@ export default function AgentPage() {
   const active = status.opportunities.filter(
     (o) => o.status === "OPPORTUNITY" || o.status === "WATCH" || o.status === "BLOCKED",
   );
+  const activeStrategies =
+    strategiesQuery.data?.strategies.filter((s) => s.status === "ACTIVE") ?? [];
+  const binanceReady = stateQuery.data?.binanceConfigured ?? false;
+  const watchCount = active.filter((o) => o.status === "WATCH").length;
+  const oppCount = active.filter((o) => o.status === "OPPORTUNITY").length;
+
+  const cycle: Array<{ label: string; value: string; ok: boolean }> = [
+    {
+      label: "Market data",
+      value: binanceReady ? "collected from Binance Web3" : "waiting — Binance not configured",
+      ok: binanceReady,
+    },
+    {
+      label: "Asset scan",
+      value: status.lastScanAt
+        ? `completed ${new Date(status.lastScanAt).toLocaleTimeString("en-US", { hour12: false })}`
+        : "pending — no scan completed yet",
+      ok: status.lastScanAt !== null,
+    },
+    {
+      label: "Divergence detection",
+      value:
+        active.length === 0
+          ? "no divergences above thresholds"
+          : `${active.length} signals (${oppCount} opportunity, ${watchCount} watch)`,
+      ok: true,
+    },
+    {
+      label: "Strategy evaluation",
+      value: `${status.activeStrategies} ACTIVE strategies`,
+      ok: false,
+    },
+    {
+      label: "Opportunity generation",
+      value: `${active.length} engine observations available below`,
+      ok: true,
+    },
+    {
+      label: "Risk",
+      value: "waiting — acts only on proposals; the loop creates none without matches",
+      ok: false,
+    },
+    {
+      label: "Execution",
+      value: "waiting — requires human authorization; the agent never executes",
+      ok: false,
+    },
+  ];
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-16">
@@ -139,6 +187,39 @@ export default function AgentPage() {
           : (stateQuery.data?.detail ?? "Bounded agent loop is disabled.")}
       </p>
 
+      <section aria-label="Current cycle" className="mt-6">
+        <h2 className="font-mono text-xs uppercase tracking-widest text-zinc-500">
+          Current cycle
+        </h2>
+        <ol className="mt-3 divide-y divide-zinc-800/60 rounded-lg border border-zinc-800 bg-zinc-900/40">
+          {cycle.map((step) => (
+            <li key={step.label} className="flex items-baseline gap-3 px-4 py-2.5 text-sm">
+              <span aria-hidden className={step.ok ? "text-emerald-400" : "text-zinc-600"}>
+                {step.ok ? "✓" : "·"}
+              </span>
+              <span className="w-44 shrink-0 font-mono text-xs uppercase tracking-wider text-zinc-500">
+                {step.label}
+              </span>
+              <span className="text-zinc-300">{step.value}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {status.activeStrategies === 0 && (
+        <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 text-sm leading-relaxed">
+          <p className="font-mono text-xs uppercase tracking-widest text-zinc-400">
+            Why the agent is not acting
+          </p>
+          <p className="mt-2 text-zinc-300">
+            No saved strategy is currently ACTIVE ({status.totalStrategies} saved). The agent can
+            observe market conditions but will not generate strategy-driven actions. Activate a
+            strategy to enable evaluation — proposals still require risk approval and human
+            authorization.
+          </p>
+        </div>
+      )}
+
       {status.lastRun && status.lastRun.ok === false && (
         <div
           role="alert"
@@ -164,7 +245,11 @@ export default function AgentPage() {
           </p>
         ) : (
           <div className="mt-3 space-y-3">
-            {active.map((o) => (
+            {active.map((o) => {
+              const matched = activeStrategies.filter(
+                (s) => s.definition.asset.ticker.toUpperCase() === o.ticker.toUpperCase(),
+              );
+              return (
               <div
                 key={`${o.ticker}-${o.tokenContractAddress}`}
                 className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4"
@@ -189,6 +274,14 @@ export default function AgentPage() {
                   Market: {o.marketState} · Reference freshness: {o.referenceFreshness} · Status:{" "}
                   {o.status}
                 </p>
+                <p className="mt-2 text-xs text-zinc-300">
+                  <span className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
+                    What happened —{" "}
+                  </span>
+                  {o.spreadPercent !== null && o.direction !== "NONE"
+                    ? `Tokenized ${o.ticker} is trading ${Math.abs(Number(o.spreadPercent)).toFixed(2)}% ${o.direction === "PREMIUM" ? "above" : "below"} its reference price.`
+                    : `No measurable divergence for tokenized ${o.ticker} versus its reference price.`}
+                </p>
                 {o.reasons.length > 0 && (
                   <div className="mt-2">
                     <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
@@ -201,22 +294,39 @@ export default function AgentPage() {
                     </ul>
                   </div>
                 )}
-                <p className="mt-2 text-xs">
-                  <span className="text-zinc-500">Available action: </span>
-                  {o.status === "BLOCKED" ? (
-                    <span className="text-zinc-300">blocked — see signal detail</span>
+                <p className="mt-2 text-xs text-zinc-300">
+                  <span className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
+                    Strategy match —{" "}
+                  </span>
+                  {matched.length === 0 ? (
+                    <>No ACTIVE strategy watches {o.ticker}.</>
                   ) : (
-                    <span className="text-zinc-300">monitor via signal detail</span>
+                    <>Monitored by {matched.map((s) => s.name).join(", ")}.</>
+                  )}
+                </p>
+                <p className="mt-2 text-xs">
+                  <span className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
+                    Action —{" "}
+                  </span>
+                  {o.status === "BLOCKED" ? (
+                    <span className="text-zinc-300">NO ACTION (blocked).</span>
+                  ) : matched.length === 0 ? (
+                    <span className="text-zinc-300">NO ACTION.</span>
+                  ) : (
+                    <span className="text-zinc-300">
+                      Under monitoring — any proposal still requires the full risk chain.
+                    </span>
                   )}{" "}
                   <a
                     href={`/opportunities/${encodeURIComponent(o.id)}`}
                     className="text-amber-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                   >
-                    View intelligence →
+                    Inspect signal →
                   </a>
                 </p>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

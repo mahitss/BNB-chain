@@ -130,6 +130,17 @@ export default function OverviewPage() {
     queryFn: () => apiGet<ExecutionsResponse>("/api/executions"),
     refetchInterval: 30_000,
   });
+  const system = useQuery({
+    queryKey: ["overview-system-status"],
+    queryFn: () =>
+      apiGet<{ services: Record<string, string> }>("/api/system/status"),
+    refetchInterval: 30_000,
+  });
+  const proposals = useQuery({
+    queryKey: ["overview-proposals"],
+    queryFn: () => apiGet<{ proposals: Array<{ status: string }> }>("/api/proposals"),
+    refetchInterval: 30_000,
+  });
 
   const refreshing =
     globalState.isFetching ||
@@ -147,7 +158,11 @@ export default function OverviewPage() {
     agent.error ? "agent status" : null,
     strategies.error ? "strategies" : null,
     executions.error ? "executions" : null,
+    system.error ? "system status" : null,
+    proposals.error ? "proposals" : null,
   ].filter((s): s is string => s !== null);
+
+  const riskState = system.data?.services["riskEngine"] ?? "unknown";
 
   const criticalPending =
     globalState.isPending || opportunities.isPending || agent.isPending;
@@ -176,6 +191,37 @@ export default function OverviewPage() {
     (e) =>
       e.state === "CONFIRMED" && new Date(e.createdAt).toDateString() === new Date().toDateString(),
   ).length;
+  const openProposals =
+    proposals.data?.proposals.filter((p) =>
+      ["PENDING_RISK", "APPROVED", "REQUIRES_REVIEW"].includes(p.status),
+    ).length ?? null;
+  const pipeline: Array<{ stage: string; value: string }> = [
+    { stage: "Market", value: gs?.onChainMarket ?? (globalState.error ? "unavailable" : "…") },
+    {
+      stage: "Signal",
+      value: opportunities.error
+        ? "unavailable"
+        : `${actionable} actionable · ${watched} watch`,
+    },
+    {
+      stage: "Strategy",
+      value:
+        agent.error || strategies.error
+          ? "unavailable"
+          : `${agentData?.activeStrategies ?? "—"} active`,
+    },
+    { stage: "Risk", value: riskState },
+    {
+      stage: "Proposal",
+      value:
+        proposals.error
+          ? "unavailable"
+          : openProposals === null
+            ? "…"
+            : `${openProposals} open`,
+    },
+    { stage: "Execution", value: executions.error ? "unavailable" : `${execs.length} total` },
+  ];
 
   return (
     <main className="mx-auto max-w-7xl">
@@ -240,6 +286,29 @@ export default function OverviewPage() {
                 : "agent status unavailable"
             }
           />
+        </div>
+      </section>
+
+      {/* Control pipeline — live stage states, never aspirational. */}
+      <section aria-label="Control pipeline" className="mt-4">
+        <div className="flex flex-col divide-y divide-zinc-800/80 rounded-lg border border-zinc-800 bg-zinc-900/40 sm:flex-row sm:items-stretch sm:divide-x sm:divide-y-0">
+          {pipeline.map((p, i) => (
+            <div key={p.stage} className="flex min-w-0 flex-1 items-center px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+                  {p.stage}
+                </p>
+                <p className="mt-0.5 truncate font-mono text-sm font-medium text-zinc-100">
+                  {p.value}
+                </p>
+              </div>
+              {i < pipeline.length - 1 && (
+                <span aria-hidden className="ml-2 hidden text-zinc-700 sm:inline">
+                  →
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       </section>
 
@@ -309,6 +378,11 @@ export default function OverviewPage() {
                           {o.marketState} · {o.referenceFreshness} · evaluated{" "}
                           {timeAgo(o.timestamp)}
                           {o.reasons[0] ? ` · ${o.reasons[0].message}` : ""}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-zinc-600">
+                          {o.status === "BLOCKED"
+                            ? "Decision: blocked by engine gate."
+                            : "Decision: no proposal — needs a matched ACTIVE strategy + risk approval."}
                         </span>
                       </span>
                       <SignalState status={o.status} />

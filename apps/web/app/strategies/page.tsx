@@ -404,6 +404,16 @@ export default function StrategiesPage() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-zinc-500">{strategy.explanation}</p>
+                {strategy.status === "DRAFT" && (
+                  <p className="mt-1 font-mono text-[11px] text-zinc-600">
+                    DRAFT — saved only, not monitored by the agent until activated.
+                  </p>
+                )}
+                {strategy.status === "ACTIVE" && (
+                  <p className="mt-1 font-mono text-[11px] text-zinc-600">
+                    ACTIVE — evaluated by the agent loop; actions still require the risk chain.
+                  </p>
+                )}
               </li>
             ))}
           </ul>

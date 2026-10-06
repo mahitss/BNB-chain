@@ -86,6 +86,11 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
           <span className="text-xs text-zinc-500">
             Expires {new Date(p.expiresAt).toLocaleTimeString("en-US", { hour12: false })}
           </span>
+          {p.strategyName && (
+            <span className="text-xs text-zinc-500">
+              From strategy: <span className="text-zinc-300">{p.strategyName}</span>
+            </span>
+          )}
         </div>
       </Card>
 
@@ -98,12 +103,17 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
               <ul className="mt-3 space-y-1 text-xs">
                 {decision.rulesPassed.map((rule) => (
                   <li key={rule} className="font-mono text-emerald-400">
-                    ✓ {rule}
+                    ✓ {rule} · PASS
+                  </li>
+                ))}
+                {decision.requiresReview.map((rule) => (
+                  <li key={rule} className="font-mono text-amber-400">
+                    ! {rule} · REVIEW — human review required before any further step
                   </li>
                 ))}
                 {decision.rulesFailed.map((rule) => (
                   <li key={rule.rule} className="font-mono text-red-400">
-                    × {rule.rule}
+                    × {rule.rule} · FAIL
                     {rule.reason && (
                       <span className="block pl-4 font-sans text-red-300/80">{rule.reason}</span>
                     )}
