@@ -66,7 +66,7 @@ import {
 } from "./executions/routes.js";
 import type { BinanceTradingClient } from "@olyr/binance";
 import { registerWalletRoutes, type WalletDeps } from "./wallet/routes.js";
-import { BawCliWalletProvider } from "./wallet/providers.js";
+import { BawCliWalletProvider, ConfiguredAddressWalletProvider, WalletNotConfiguredError, WalletReadError, type AgenticWalletProvider } from "./wallet/providers.js";
 import { StrategyLoopWorker } from "./wallet/strategy-loop.js";
 
 export const API_VERSION = "0.3.0";
@@ -204,6 +204,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   // Trade proposals (Phase 5): built from validated strategies + Phase 3
   // market data; risk decisions come exclusively from the Rust engine.
+  // The wallet provider is selected below; the position resolver reads it
+  // lazily so real positions flow into POSITION_LIMIT (null when unknown).
+  // eslint-disable-next-line prefer-const -- assigned once below, after executionDeps exists
+  let walletProvider: AgenticWalletProvider;
   let proposalService: ProposalService | null = null;
   const prismaDelegate = (options.prisma ?? prisma) as unknown as PrismaDelegate | null;
   if (prismaDelegate) {
@@ -212,6 +216,22 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       options.riskClient ??
         new HttpRiskEngineClient(envOptionalString("OLYR_RISK_URL") ?? "http://localhost:8002"),
       envInt("OLYR_PROPOSAL_TTL_SECONDS", 300),
+      {
+        positionUsdForTicker: async (ticker: string): Promise<number | null> => {
+          try {
+            if (!marketService) return null;
+            const snapshot = await marketService.getSnapshot(ticker);
+            const contract = snapshot?.tokenContractAddress;
+            if (!contract) return null;
+            const positions = await walletProvider.getPositions([contract]);
+            const raw = positions[0]?.valueUsd;
+            const value = raw === null || raw === undefined ? NaN : Number(raw);
+            return Number.isFinite(value) && value >= 0 ? value : null;
+          } catch {
+            return null;
+          }
+        },
+      },
     );
   }
 
@@ -261,9 +281,25 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   }
 
   // Wallet + agent-status routes (Phase 7) + the bounded agent loop.
+  // Provider selection: a configured on-chain identity (OLYR_EXECUTOR_ADDRESS)
+  // enables the read-only address provider backed by the Binance balance API;
+  // otherwise the baw CLI adapter applies (fails closed until provisioned).
+  // Neither path holds signing material — execution stays with the Go service.
   const walletLimits = loadStrategyLimits();
+  const addressProvider =
+    executionDeps.executorAddress && binanceConfig
+      ? new ConfiguredAddressWalletProvider({
+          address: executionDeps.executorAddress,
+          chainId,
+          readBalances: (balanceChainId, address) =>
+            (
+              executionDeps.tradingClient as BinanceTradingClient
+            ).getAllTokenBalances(balanceChainId, address),
+        })
+      : null;
+  walletProvider = addressProvider ?? new BawCliWalletProvider({});
   registerWalletRoutes(app, {
-    provider: new BawCliWalletProvider({}),
+    provider: walletProvider,
     policyMode: executionDeps.policyMode,
     limits: { ...walletLimits, maxSlippagePercent: envInt("OLYR_MAX_SLIPPAGE_PERCENT", 1) },
     binanceConfigured: Boolean(binanceConfig),
@@ -562,28 +598,84 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     };
   });
 
-  // ---- Portfolio (Phase 7): honest 503 while the wallet is unconfigured ----
+  // ---- Portfolio: real read-only balances when the wallet resolves,
+  // otherwise an explicit error (never fabricated zeros) ----
+
+  const portfolioOf = async (ticker?: string) => {
+    const balances = await walletProvider.getBalances();
+    const wanted = ticker?.toUpperCase();
+    const positions = balances
+      .filter(
+        (b) =>
+          !wanted ||
+          b.symbol?.toUpperCase() === wanted ||
+          b.tokenContractAddress.toLowerCase() === wanted.toLowerCase(),
+      )
+      .map((b) => {
+        const amount = b.balance !== null ? Number(b.balance) : NaN;
+        const price = b.tokenPrice !== null ? Number(b.tokenPrice) : NaN;
+        const valueUsd =
+          Number.isFinite(amount) && Number.isFinite(price) && amount >= 0 && price >= 0
+            ? String(amount * price)
+            : null;
+        return {
+          symbol: b.symbol,
+          tokenContractAddress: b.tokenContractAddress,
+          chainId: b.chainId,
+          balance: b.balance,
+          tokenPrice: b.tokenPrice,
+          valueUsd,
+        };
+      });
+    return {
+      positions,
+      source: "binance-web3",
+      timestamp: new Date().toISOString(),
+    };
+  };
 
   app.get("/api/portfolio", async (_request, reply) => {
-    requireProposals();
-    return reply.code(503).send({
-      error: {
-        category: "wallet-not-configured",
-        message:
-          "Portfolio requires the Agentic Wallet (baw CLI signed in). Install per docs/dev-report and set OLYR_WALLET_* configuration.",
-      },
-    });
+    try {
+      return await portfolioOf();
+    } catch (error) {
+      if (error instanceof WalletNotConfiguredError) {
+        return reply.code(503).send({
+          error: {
+            category: "wallet-not-configured",
+            message:
+              "Portfolio requires a configured wallet: set OLYR_EXECUTOR_ADDRESS to a BSC address or provision the Agentic Wallet (baw CLI signed in).",
+          },
+        });
+      }
+      if (error instanceof WalletReadError) {
+        return reply.code(502).send({
+          error: { category: "wallet-read-failed", message: error.message },
+        });
+      }
+      throw error;
+    }
   });
 
   app.get<{ Params: { ticker: string } }>("/api/portfolio/:ticker", async (request, reply) => {
     requireTicker(request.params.ticker);
-    requireProposals();
-    return reply.code(503).send({
-      error: {
-        category: "wallet-not-configured",
-        message: "Portfolio requires the Agentic Wallet (baw CLI signed in).",
-      },
-    });
+    try {
+      return await portfolioOf(request.params.ticker);
+    } catch (error) {
+      if (error instanceof WalletNotConfiguredError) {
+        return reply.code(503).send({
+          error: {
+            category: "wallet-not-configured",
+            message: "Portfolio requires a configured wallet (OLYR_EXECUTOR_ADDRESS or baw CLI).",
+          },
+        });
+      }
+      if (error instanceof WalletReadError) {
+        return reply.code(502).send({
+          error: { category: "wallet-read-failed", message: error.message },
+        });
+      }
+      throw error;
+    }
   });
 
   // ---- Trade proposal pipeline (Phase 5) ---------------------------------

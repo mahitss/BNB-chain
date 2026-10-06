@@ -17,6 +17,7 @@ interface WalletResponse {
     status: string;
     address: string | null;
     network: string | null;
+    detail: string | null;
     versions: { cli: string | null; skill: string | null };
   };
   executionMode: string;
@@ -49,11 +50,28 @@ function Capability({ label, enabled }: { label: string; enabled: boolean }) {
   );
 }
 
+interface BalanceEntry {
+  chainId: string;
+  tokenContractAddress: string;
+  symbol: string | null;
+  balance: string | null;
+  tokenPrice: string | null;
+}
+
 export default function WalletPage() {
   const walletQuery = useQuery({
     queryKey: ["wallet"],
     queryFn: () => apiGet<WalletResponse>("/api/wallet"),
     refetchInterval: 60_000,
+  });
+  const balancesQuery = useQuery({
+    queryKey: ["wallet-balances"],
+    queryFn: () =>
+      apiGet<{ balances: BalanceEntry[]; source: string; timestamp: string }>(
+        "/api/wallet/balances",
+      ),
+    refetchInterval: 60_000,
+    retry: 0,
   });
 
   if (walletQuery.isPending) {
@@ -118,18 +136,60 @@ export default function WalletPage() {
 
       {wallet.address && <p className="mt-2 font-mono text-xs text-zinc-500">{wallet.address}</p>}
 
-      {!connected && (
+      {!connected && wallet.status !== "CONNECTED" && (
         <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/5 p-5 text-sm leading-relaxed text-amber-300">
-          <p className="font-semibold">Agentic Wallet not connected.</p>
-          <p className="mt-2 text-amber-200/80">
-            The Binance Agentic Wallet connects via the official Skill (
-            <code className="font-mono">
-              npx skills add binance/binance-skills-hub/skills/binance-web3/binance-agentic-wallet
-            </code>
-            ) and QR sign-in from the Binance App. OLYR isolates it behind an adapter and never
-            receives signing material. Balances and positions appear here once connected.
+          <p className="font-semibold">
+            {wallet.status === "ERROR"
+              ? "Wallet error."
+              : wallet.status === "CONFIGURED"
+                ? "Wallet configured — verification pending."
+                : "Agentic Wallet not connected."}
           </p>
+          <p className="mt-2 text-amber-200/80">
+            {wallet.detail ?? "No wallet address is configured."}
+          </p>
+          {wallet.status !== "ERROR" && wallet.status !== "CONFIGURED" && (
+            <p className="mt-2 text-amber-200/80">
+              The Binance Agentic Wallet connects via the official Skill (
+              <code className="font-mono">
+                npx skills add binance/binance-skills-hub/skills/binance-web3/binance-agentic-wallet
+              </code>
+              ) and QR sign-in from the Binance App, or set OLYR_EXECUTOR_ADDRESS to a BSC
+              address for read-only access. OLYR isolates it behind an adapter and never
+              receives signing material. Balances and positions appear here once connected.
+            </p>
+          )}
         </div>
+      )}
+
+      {balancesQuery.data && balancesQuery.data.balances.length > 0 && (
+        <section className="mt-8">
+          <h2 className="font-mono text-xs uppercase tracking-widest text-zinc-500">
+            Balances · {balancesQuery.data.source}
+          </h2>
+          <ul className="mt-3 divide-y divide-zinc-800 rounded-lg border border-zinc-800">
+            {balancesQuery.data.balances.map((b) => (
+              <li
+                key={`${b.chainId}:${b.tokenContractAddress}`}
+                className="flex items-baseline justify-between gap-3 px-4 py-2.5"
+              >
+                <div>
+                  <p className="font-mono text-sm text-zinc-200">{b.symbol ?? "Unknown"}</p>
+                  <p className="font-mono text-xs text-zinc-500">{b.tokenContractAddress}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-mono text-sm text-zinc-100">{b.balance ?? "Unavailable"}</p>
+                  <p className="font-mono text-xs text-zinc-500">
+                    {b.tokenPrice ? `$${b.tokenPrice}` : "price unavailable"}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 font-mono text-xs text-zinc-600">
+            read {new Date(balancesQuery.data.timestamp).toLocaleTimeString("en-US", { hour12: false })}
+          </p>
+        </section>
       )}
 
       <section className="mt-8">

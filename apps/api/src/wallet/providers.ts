@@ -23,12 +23,18 @@ import type { TokenBalance } from "@olyr/binance";
 
 export interface WalletIdentity {
   provider: string;
-  status: "CONNECTED" | "NOT_CONFIGURED" | "SIGNED_OUT";
+  /** NOT_CONFIGURED: no address. CONFIGURED: address set, read not yet
+   * verified. CONNECTED: a real read-only query succeeded. ERROR: address
+   * configured but invalid or the upstream read failed. SIGNED_OUT: legacy
+   * CLI state (CLI present, session unknown). */
+  status: "CONNECTED" | "NOT_CONFIGURED" | "SIGNED_OUT" | "CONFIGURED" | "ERROR";
   address: string | null;
   network: string | null;
   /** CLI/skill versions from preflight, when detectable. */
   versions: { cli: string | null; skill: string | null };
   capabilities: string[];
+  /** Human-readable state detail. Never carries secrets. */
+  detail: string | null;
 }
 
 export interface WalletPosition {
@@ -90,6 +96,9 @@ export class BawCliWalletProvider implements AgenticWalletProvider {
       network: null,
       versions: { cli: preflight.cliVersion, skill: null },
       capabilities: walletSkillAllowlist(),
+      detail: preflight.installed
+        ? "CLI detected; session state unknown without sign-in."
+        : "Agentic Wallet CLI not detected and no wallet address is configured.",
     };
   }
 
@@ -144,6 +153,173 @@ export class WalletNotConfiguredError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "WalletNotConfiguredError";
+  }
+}
+
+/** Upstream wallet read failed after configuration was accepted. Distinct
+ * from not-configured: the address exists, but Binance rejected the query
+ * or the network failed. Never carries credentials. */
+export class WalletReadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WalletReadError";
+  }
+}
+
+const BSC_CHAIN_ID = "56";
+const ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
+
+export function isValidBscAddress(value: string | null | undefined): boolean {
+  return typeof value === "string" && ADDRESS_PATTERN.test(value.trim());
+}
+
+function approxValueUsd(balance: string | null, price: string | null): string | null {
+  if (balance === null || price === null) return null;
+  const b = Number(balance);
+  const p = Number(price);
+  if (!Number.isFinite(b) || !Number.isFinite(p) || b < 0 || p < 0) return null;
+  const value = b * p;
+  return Number.isFinite(value) ? String(value) : null;
+}
+
+/**
+ * Address-backed read-only wallet provider.
+ *
+ * Uses the configured on-chain identity (OLYR_EXECUTOR_ADDRESS in this
+ * deployment) with the existing Binance Web3 balance API
+ * (`query-address-info` skill surface). Read-only by construction: it holds
+ * no keys, never signs, and refuses every execution operation. Verification
+ * state is honest: CONFIGURED until a real read succeeds (CONNECTED) or
+ * fails/is invalid (ERROR).
+ */
+export class ConfiguredAddressWalletProvider implements AgenticWalletProvider {
+  private readonly address: string;
+  private readonly chainId: string;
+  private readonly network: string;
+  private readonly readBalances: (
+    chainId: string,
+    address: string,
+  ) => Promise<TokenBalance[]>;
+  private readonly verificationTtlMs: number;
+  private lastVerifiedAt: number | null = null;
+  private lastError: string | null = null;
+
+  constructor(options: {
+    address: string;
+    chainId?: string;
+    network?: string;
+    readBalances: (chainId: string, address: string) => Promise<TokenBalance[]>;
+    verificationTtlSeconds?: number;
+  }) {
+    this.address = options.address.trim();
+    this.chainId = (options.chainId ?? BSC_CHAIN_ID).trim();
+    this.network = options.network ?? "BNB Smart Chain";
+    this.readBalances = options.readBalances;
+    this.verificationTtlMs = (options.verificationTtlSeconds ?? 300) * 1000;
+  }
+
+  async preflight(): Promise<{
+    installed: boolean;
+    cliVersion: string | null;
+    authenticated: boolean | null;
+  }> {
+    // No CLI involved: the "installation" is a configured, well-formed address.
+    const configured = isValidBscAddress(this.address) && this.chainId === BSC_CHAIN_ID;
+    return { installed: configured, cliVersion: null, authenticated: null };
+  }
+
+  async getWalletIdentity(): Promise<WalletIdentity> {
+    const base = {
+      provider: "binance-agentic-wallet",
+      address: isValidBscAddress(this.address) ? this.address : null,
+      network: this.network,
+      versions: { cli: null, skill: null },
+      capabilities: walletSkillAllowlist(),
+    };
+    if (!isValidBscAddress(this.address)) {
+      return {
+        ...base,
+        status: "ERROR",
+        detail:
+          "A wallet address is configured but it is not a valid BSC address (expected 0x + 40 hex characters).",
+      };
+    }
+    if (this.chainId !== BSC_CHAIN_ID) {
+      return {
+        ...base,
+        status: "ERROR",
+        detail: `Wallet chain ${this.chainId} is not the OLYR BSC target (${BSC_CHAIN_ID}).`,
+      };
+    }
+    if (this.lastError !== null) {
+      return { ...base, status: "ERROR", detail: this.lastError };
+    }
+    if (
+      this.lastVerifiedAt !== null &&
+      Date.now() - this.lastVerifiedAt < this.verificationTtlMs
+    ) {
+      return { ...base, status: "CONNECTED", detail: "Read-only wallet query succeeded." };
+    }
+    return {
+      ...base,
+      status: "CONFIGURED",
+      detail: "Address configured; read-only verification has not completed yet.",
+    };
+  }
+
+  async getWalletAddress(): Promise<string | null> {
+    if (!isValidBscAddress(this.address)) {
+      throw new WalletNotConfiguredError("No valid wallet address is configured.");
+    }
+    return this.address;
+  }
+
+  async getBalances(): Promise<TokenBalance[]> {
+    const address = await this.getWalletAddress();
+    try {
+      const balances = await this.readBalances(this.chainId, address!);
+      this.lastVerifiedAt = Date.now();
+      this.lastError = null;
+      return balances;
+    } catch (error) {
+      this.lastError =
+        error instanceof Error
+          ? `Wallet read failed: ${error.message.slice(0, 160)}`
+          : "Wallet read failed with an unknown error.";
+      throw new WalletReadError(this.lastError);
+    }
+  }
+
+  async getPositions(tokenizedContracts: string[]): Promise<WalletPosition[]> {
+    const wanted = new Set(tokenizedContracts.map((c) => c.toLowerCase()));
+    const balances = await this.getBalances();
+    return balances
+      .filter((b) => wanted.has(b.tokenContractAddress.toLowerCase()))
+      .map((b) => ({
+        tokenContractAddress: b.tokenContractAddress,
+        symbol: b.symbol,
+        balance: b.balance,
+        tokenPrice: b.tokenPrice,
+        valueUsd: approxValueUsd(b.balance, b.tokenPrice),
+      }));
+  }
+
+  async prepareExecution(): Promise<{ prepared: boolean; reason: string }> {
+    throw new WalletNotConfiguredError(
+      "Read-only address provider cannot prepare execution: signing requires the provisioned execution service.",
+    );
+  }
+
+  async requestExecution(): Promise<{ requested: boolean; reason: string }> {
+    throw new WalletNotConfiguredError(
+      "Read-only address provider cannot request execution: signing requires the provisioned execution service.",
+    );
+  }
+
+  async getExecutionStatus(): Promise<{ status: "UNAVAILABLE"; reason: string }> {
+    throw new WalletNotConfiguredError(
+      "Execution status is unavailable from a read-only address provider.",
+    );
   }
 }
 

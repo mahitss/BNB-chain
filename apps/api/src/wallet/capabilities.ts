@@ -29,9 +29,17 @@ export function computeCapabilities(options: {
   policyMode: ExecutionPolicyMode;
   binanceConfigured: boolean;
 }): AgentCapabilities {
+  const status = options.walletIdentity?.status ?? null;
   const walletConfigured =
-    options.walletIdentity?.status === "CONNECTED" ||
-    options.walletIdentity?.status === "SIGNED_OUT" ||
+    status === "CONNECTED" ||
+    status === "CONFIGURED" ||
+    status === "SIGNED_OUT" ||
+    (options.walletIdentity?.versions.cli !== null &&
+      options.walletIdentity?.versions.cli !== undefined);
+  // Execution additionally requires a signing-capable identity (CLI-backed
+  // session). A read-only configured address NEVER enables execution.
+  const executionCapable =
+    status === "SIGNED_OUT" ||
     (options.walletIdentity?.versions.cli !== null &&
       options.walletIdentity?.versions.cli !== undefined);
   const policyAllows = options.policyMode !== "DISABLED";
@@ -41,7 +49,7 @@ export function computeCapabilities(options: {
     canReadPortfolio: walletConfigured,
     canRequestQuotes: options.binanceConfigured && policyAllows,
     canSimulateTransactions: options.binanceConfigured && policyAllows,
-    canExecuteTrades: walletConfigured && policyAllows,
+    canExecuteTrades: executionCapable && policyAllows,
     walletConfigured,
     policyMode: options.policyMode,
   };

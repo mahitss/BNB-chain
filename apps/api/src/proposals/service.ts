@@ -7,10 +7,11 @@
  * invented). Platform limits flow from the same environment the Rust engine
  * reads — the LLM can never influence any of it.
  *
- * Portfolio state: the Binance Wallet integration does not exist yet
- * (Phase 4 of the hackathon spec), so currentPositionUsd/dailyVolumeUsd are
- * null and the Rust engine's UNKNOWN branches handle them. Daily traded
- * volume starts at 0 — OLYR has never executed a trade.
+ * Portfolio state: real wallet positions flow in through the optional
+ * position resolver when a wallet is configured; otherwise
+ * currentPositionUsd is null and the Rust engine's UNKNOWN branches handle
+ * it (fail-closed). Daily traded volume starts at 0 — OLYR has never
+ * executed a trade.
  */
 import type {
   MarketSnapshot,
@@ -76,15 +77,40 @@ export class ProposalService {
   private readonly store: ProposalStoreLike;
   private readonly riskClient: RiskEngineClient;
   private readonly ttlSeconds: number;
+  /** Real wallet position lookup (USD) by underlying ticker. Absent or
+   * failing → null (unknown), which keeps POSITION_LIMIT fail-closed. */
+  private readonly positionUsdForTicker?: (ticker: string) => Promise<number | null>;
 
-  constructor(store: ProposalStoreLike, riskClient: RiskEngineClient, ttlSeconds: number) {
+  constructor(
+    store: ProposalStoreLike,
+    riskClient: RiskEngineClient,
+    ttlSeconds: number,
+    options: { positionUsdForTicker?: (ticker: string) => Promise<number | null> } = {},
+  ) {
     this.store = store;
     this.riskClient = riskClient;
     this.ttlSeconds = ttlSeconds;
+    this.positionUsdForTicker = options.positionUsdForTicker;
+  }
+
+  /** Wallet position in USD, or null when unknown. Never throws: any failure
+   * means unknown, and unknown must reach the risk engine as null — never 0. */
+  private async resolvePositionUsd(ticker: string): Promise<number | null> {
+    if (!this.positionUsdForTicker) return null;
+    try {
+      const value = await this.positionUsdForTicker(ticker);
+      return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Build a proposal from the validated strategy + latest market data. */
-  buildInput(strategy: StrategyDefinition, snapshot: MarketSnapshot | null): RiskInput {
+  buildInput(
+    strategy: StrategyDefinition,
+    snapshot: MarketSnapshot | null,
+    currentPositionUsd: number | null = null,
+  ): RiskInput {
     const action = ACTION_BY_STRATEGY_ACTION[strategy.action.type];
     if (!action) {
       throw new Error(`Strategy action ${strategy.action.type} does not produce a trade proposal`);
@@ -109,7 +135,7 @@ export class ProposalService {
       marketState: snapshot?.marketState ?? null,
       referenceFreshness: snapshot?.referenceFreshness ?? null,
       liquidityStatus: liquidityToRisk(snapshot?.liquidity.status ?? null),
-      currentPositionUsd: null, // portfolio integration arrives in a later phase
+      currentPositionUsd, // real wallet position when resolvable, else null (fail-closed)
       dailyTradedUsd: 0, // OLYR has never executed a trade
       dailyVolumeUsd:
         snapshot?.volume24H !== undefined &&
@@ -127,7 +153,11 @@ export class ProposalService {
     strategyId: string | null,
     snapshot: MarketSnapshot | null,
   ): Promise<TradeProposal> {
-    const input = this.buildInput(strategy, snapshot);
+    const input = this.buildInput(
+      strategy,
+      snapshot,
+      await this.resolvePositionUsd(strategy.asset.ticker),
+    );
     const expiresAt = new Date(Date.now() + this.ttlSeconds * 1000);
     const row = await this.store.createProposal({
       strategyId,
